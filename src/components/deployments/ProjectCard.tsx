@@ -91,7 +91,7 @@ export default function ProjectCard({ project, onClick }: ProjectCardProps) {
           onClick={() => onClick(project)}
         >
           {/* Image */}
-          <div className="relative aspect-[3/2] overflow-hidden bg-carbono-mid">
+          <div className="relative overflow-hidden bg-carbono-mid" style={{ height: '100px' }}>
             {project.photo ? (
               <img
                 src={project.photo}
