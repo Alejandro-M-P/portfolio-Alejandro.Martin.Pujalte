@@ -1,6 +1,1 @@
-{
-  "availabilityValue": 99.9,
-  "dustThresholdDays": 60,
-  "starsForGold": 5,
-  "status": "ONLINE"
-}
+{"availabilityValue":100,"dustThresholdDays":60,"starsForGold":5,"status":"ONLINE","logLimit":10,"cvUrl":"/cv.pdf"}
