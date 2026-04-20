@@ -1,18 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { Project, SiteSettings } from '../../types';
-import Pill from '../ui/Pill';
 
 interface ProjectCardProps {
   project: Project;
   onClick: (project: Project) => void;
 }
 
-const SETTINGS_KEY = 'portfolioSettings';
 const DEFAULT_SETTINGS: SiteSettings = { availabilityValue: 99.9, dustThresholdDays: 60, starsForGold: 5 };
 
 function loadSettings(): SiteSettings {
   try {
-    const s = localStorage.getItem(SETTINGS_KEY);
+    const s = localStorage.getItem('portfolioSettings');
     if (s) return { ...DEFAULT_SETTINGS, ...JSON.parse(s) };
   } catch {}
   return DEFAULT_SETTINGS;
@@ -25,15 +23,6 @@ function getEntropyStyle(pushedAt: string | undefined, thresholdDays: number): R
   if (days < thresholdDays * 2) return { filter: 'brightness(0.82) saturate(0.45)' };
   if (days < thresholdDays * 3) return { filter: 'brightness(0.65) saturate(0.15) blur(0.5px)' };
   return { filter: 'brightness(0.5) saturate(0) blur(1px)' };
-}
-
-function getUptime(pushedAt: string | undefined): string {
-  if (!pushedAt) return '?';
-  const days = Math.floor((Date.now() - new Date(pushedAt).getTime()) / 86_400_000);
-  if (days < 1) return '<1d';
-  if (days < 30) return `${days}d`;
-  if (days < 365) return `${Math.floor(days / 30)}mo`;
-  return `${Math.floor(days / 365)}y`;
 }
 
 const statusStyle: Record<string, string> = {
@@ -70,120 +59,110 @@ export default function ProjectCard({ project, onClick }: ProjectCardProps) {
     return () => observer.disconnect();
   }, []);
 
-  const stars = Number(project.specs?.stars ?? 0);
+  const stars  = Number(project.specs?.stars ?? 0);
   const status = project.specs?.status as string | undefined;
-  const hasVideo = !!(project.specs?.video);
   const isGold = !!(project.isHighlighted || stars >= settings.starsForGold);
   const entropyStyle = isGold ? {} : getEntropyStyle(project.pushedAt, settings.dustThresholdDays);
-  const uptime = getUptime(project.pushedAt);
-  const mainImage = project.stack[0] ?? 'UNKNOWN';
+
+  if (!visible) return (
+    <div ref={ref} className="h-[160px] border border-white/5 bg-carbono-surface animate-pulse" />
+  );
 
   return (
-    <div ref={ref} className={`transition-opacity duration-500 ${visible ? 'opacity-100' : 'opacity-0'}`}>
-      {visible && (
-        <div
-          className={`border cursor-pointer group transition-colors duration-100 relative ${isGold ? 'border-bronze crt-flicker' : 'border-white/10 bg-carbono-surface hover:border-white/30'}`}
-          style={{
-            backgroundColor: isGold ? '#0a0a0a' : undefined,
-            boxShadow: isGold ? '0 0 28px rgba(184,115,51,0.22), inset 0 0 60px rgba(184,115,51,0.04)' : undefined,
-            ...entropyStyle,
-          }}
-          onClick={() => onClick(project)}
-        >
-          {/* Image */}
-          <div className="relative overflow-hidden bg-carbono-mid" style={{ height: '100px' }}>
-            {project.photo ? (
-              <img
-                src={project.photo}
-                alt={project.name}
-                loading="lazy"
-                decoding="async"
-                className={`w-full h-full object-cover transition-all duration-200 ${project.isPrivate ? 'opacity-50' : ''} group-hover:grayscale-0`}
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-xs text-text-faint tracking-widest">
-                NO_PREVIEW
-              </div>
-            )}
-
-            {/* REDACTED overlay */}
-            {project.isPrivate && (
-              <div className="absolute inset-0 redacted-stripes flex flex-col items-center justify-center gap-2">
-                <div className="border-2 border-err/70 px-3 py-1 bg-carbono/70" style={{ transform: 'rotate(-8deg)' }}>
-                  <span className="text-err text-[10px] font-bold tracking-[0.3em] uppercase">CLASSIFIED</span>
-                </div>
-                <span className="text-[9px] text-white/40 tracking-widest text-center px-4">
-                  Private client project · NDA
-                </span>
-              </div>
-            )}
-
-            {/* Bronze shimmer */}
-            {isGold && (
-              <div className="absolute inset-0 pointer-events-none" style={{
-                background: 'linear-gradient(135deg, rgba(184,115,51,0.1) 0%, transparent 50%, rgba(184,115,51,0.06) 100%)',
-              }} />
-            )}
-
-            {/* Badges */}
-            <div className="absolute top-2 left-2 flex flex-col gap-1">
-              <Pill variant="default" className={`text-xs ${isGold ? 'text-bronze border-bronze/50' : ''}`}>{project.id}</Pill>
-              {status && statusStyle[status] && (
-                <span className={`text-[9px] font-bold tracking-widest uppercase border px-1.5 py-0.5 leading-none ${statusStyle[status]}`}>
-                  {status.replace('_', ' ')}
-                </span>
-              )}
-              {project.isFavorite && (
-                <span className="text-[9px] font-bold tracking-widest uppercase border px-1.5 py-0.5 leading-none text-bronze border-bronze/50 bg-bronze/10">
-                  PINNED
-                </span>
-              )}
-            </div>
-
-            {stars > 0 && (
-              <div className="absolute top-2 right-2 flex items-center gap-1 bg-black/70 border border-white/25 px-2 py-1">
-                <span className={`text-xs ${isGold ? 'text-bronze' : 'text-warn'}`}>★</span>
-                <span className="text-xs text-white font-mono font-bold">{stars}</span>
-              </div>
-            )}
-
-            <div className="absolute inset-0 bg-gradient-to-t from-carbono/80 to-transparent" />
+    <div ref={ref}>
+      {/*
+        Full-image card: photo fills the entire card,
+        info overlaid at the bottom with a gradient.
+      */}
+      <div
+        className={`relative h-[160px] cursor-pointer group overflow-hidden border transition-all duration-150
+          ${isGold
+            ? 'border-bronze crt-flicker'
+            : 'border-white/10 hover:border-white/40'
+          }`}
+        style={{
+          boxShadow: isGold ? '0 0 24px rgba(184,115,51,0.2)' : undefined,
+          ...entropyStyle,
+        }}
+        onClick={() => onClick(project)}
+      >
+        {/* Background image — fills entire card */}
+        {project.photo ? (
+          <img
+            src={project.photo}
+            alt={project.name}
+            loading="lazy"
+            decoding="async"
+            className={`absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105
+              ${project.isPrivate ? 'opacity-40' : ''}`}
+          />
+        ) : (
+          <div className="absolute inset-0 bg-carbono-mid flex items-center justify-center">
+            <span className="text-[10px] text-text-faint tracking-widest">NO_PREVIEW</span>
           </div>
+        )}
 
-          {/* Card body */}
-          <div className="p-2">
-            <p className={`text-[11px] font-bold tracking-widest mb-1.5 uppercase ${isGold ? 'text-bronze' : 'text-white'}`}>
-              {project.name}
-            </p>
+        {/* Gold shimmer */}
+        {isGold && (
+          <div className="absolute inset-0 pointer-events-none" style={{
+            background: 'linear-gradient(135deg, rgba(184,115,51,0.12) 0%, transparent 60%, rgba(184,115,51,0.06) 100%)',
+          }} />
+        )}
 
-            {/* Pod indicators */}
-            <div className="flex gap-2 mb-1.5">
-              <span className="text-[9px] tracking-widest text-[#22c55e]">
-                <span className="animate-pulse">●</span> RUNNING
+        {/* Private overlay */}
+        {project.isPrivate && (
+          <div className="absolute inset-0 redacted-stripes flex flex-col items-center justify-center gap-1.5">
+            <div className="border-2 border-err/70 px-2.5 py-0.5 bg-carbono/80" style={{ transform: 'rotate(-6deg)' }}>
+              <span className="text-err text-[9px] font-bold tracking-[0.3em] uppercase">CLASSIFIED</span>
+            </div>
+            <span className="text-[8px] text-white/40 tracking-widest">Private · NDA</span>
+          </div>
+        )}
+
+        {/* Gradient overlay — bottom to top */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
+
+        {/* Top-left badges */}
+        <div className="absolute top-1.5 left-1.5 flex gap-1">
+          {status && statusStyle[status] && (
+            <span className={`text-[8px] font-bold tracking-widest uppercase border px-1.5 py-0.5 leading-none backdrop-blur-sm ${statusStyle[status]}`}>
+              {status.replace('_', ' ')}
+            </span>
+          )}
+          {project.isFavorite && (
+            <span className="text-[8px] font-bold tracking-widest uppercase border px-1.5 py-0.5 leading-none text-bronze border-bronze/50 bg-bronze/20 backdrop-blur-sm">
+              PINNED
+            </span>
+          )}
+        </div>
+
+        {/* Top-right: stars */}
+        {stars > 0 && (
+          <div className="absolute top-1.5 right-1.5 flex items-center gap-1 bg-black/60 border border-warn/40 px-2 py-1 backdrop-blur-sm">
+            <span className="text-sm text-warn">★</span>
+            <span className="text-sm text-white font-mono font-bold">{stars}</span>
+          </div>
+        )}
+
+        {/* Bottom info overlay */}
+        <div className="absolute bottom-0 left-0 right-0 px-2.5 pb-2 pt-4">
+          <p className={`text-[11px] font-bold tracking-widest uppercase leading-tight
+            ${isGold ? 'text-bronze' : 'text-white'}`}>
+            {project.name}
+          </p>
+          <div className="flex flex-wrap gap-1 mt-1">
+            {[...new Set(project.stack)].slice(0, 3).map(tech => (
+              <span key={tech} className={`text-[8px] border px-1 py-0.5 tracking-widest uppercase backdrop-blur-sm
+                ${isGold ? 'border-bronze/40 text-bronze/80 bg-black/40' : 'border-white/25 text-white/70 bg-black/40'}`}>
+                {tech}
               </span>
-              <span className="text-[9px] tracking-widest text-text-faint">IMG:{mainImage}</span>
-            </div>
-
-            <div className="flex flex-wrap gap-1">
-              {[...new Set(project.stack)].map((tech) => (
-                <span key={tech} className={`text-xs border px-1.5 py-0.5 tracking-widest uppercase ${isGold ? 'border-bronze/40 text-bronze/80' : 'border-white/30 text-white/70'}`}>
-                  {tech}
-                </span>
-              ))}
-            </div>
+            ))}
+            {project.stack.length > 3 && (
+              <span className="text-[8px] text-white/40 py-0.5">+{project.stack.length - 3}</span>
+            )}
           </div>
         </div>
-      )}
-
-      {!visible && (
-        <div className="border border-white/5 bg-carbono-surface">
-          <div className="aspect-video bg-carbono animate-pulse" />
-          <div className="p-3 flex flex-col gap-2">
-            <div className="h-3 bg-white/5 animate-pulse w-2/3" />
-            <div className="h-3 bg-white/5 animate-pulse w-1/3" />
-          </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 }
