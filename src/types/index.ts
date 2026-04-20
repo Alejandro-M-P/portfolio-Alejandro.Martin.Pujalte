@@ -42,6 +42,8 @@ export interface Experience {
   tech: string[];
   url?: string;
   current?: boolean;
+  impact?: string;
+  logoUrl?: string;
 }
 
 export interface SiteSettings {
@@ -49,6 +51,9 @@ export interface SiteSettings {
   dustThresholdDays: number;
   starsForGold: number;
   status?: 'ONLINE' | 'OFFLINE' | 'BUSY';
+  logLimit?: number;
+  cvUrl?: string;
+  linkedinUrl?: string;
 }
 
 export interface BuildEntry {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { Project, TechTool, Ambition, Experience, SiteSettings, BuildEntry } from '../../types';
+import { logActivity } from '../../lib/activityLog';
 
 const ADMIN_PASSWORD = import.meta.env.PUBLIC_ADMIN_PASSWORD;
 const GITHUB_TOKEN = import.meta.env.PUBLIC_GITHUB_TOKEN;
@@ -289,6 +290,7 @@ function ProjectsTab() {
       localStorage.setItem('portfolioProjects', JSON.stringify(updated));
       sessionStorage.setItem('lastDataUpdate', Date.now().toString());
       setStatus({ type: 'success', msg: editing ? 'PROJECT_UPDATED' : 'PROJECT_CREATED' });
+      logActivity('INFO', editing ? `PROJECT_UPDATED ${p.id}` : `PROJECT_ADDED ${p.id} — ${p.name}`);
       clear(); await load();
     } catch (e: unknown) {
       setStatus({ type: 'error', msg: e instanceof Error ? e.message : 'SAVE_FAILED' });
@@ -303,6 +305,7 @@ function ProjectsTab() {
       localStorage.setItem('portfolioProjects', JSON.stringify(updated));
       sessionStorage.setItem('lastDataUpdate', Date.now().toString());
       setStatus({ type: 'success', msg: 'PROJECT_DELETED' });
+      logActivity('WARN', `PROJECT_REMOVED ${id}`);
       setConfirm(null); clear(); await load();
     } catch (e: unknown) {
       setStatus({ type: 'error', msg: e instanceof Error ? e.message : 'DELETE_FAILED' });
@@ -462,6 +465,34 @@ function TechTab() {
   const [status, setStatus] = useState<{ type: 'success' | 'error' | 'idle'; msg: string }>({ type: 'idle', msg: '' });
   const [loading, setLoading] = useState(false);
   const [scanLoading, setScanLoading] = useState(false);
+  const [calcLoading, setCalcLoading] = useState(false);
+
+  function calcFromProjects() {
+    const stored = localStorage.getItem('portfolioProjects');
+    if (!stored) { setStatus({ type: 'error', msg: 'NO_PROJECTS_FOUND' }); return; }
+    const projects = JSON.parse(stored) as { stack?: string[] }[];
+    if (!projects.length) { setStatus({ type: 'error', msg: 'NO_PROJECTS' }); return; }
+    setCalcLoading(true);
+    const counts: Record<string, number> = {};
+    for (const p of projects) {
+      for (const tech of (p.stack ?? [])) {
+        counts[tech] = (counts[tech] ?? 0) + 1;
+      }
+    }
+    const total = projects.length;
+    const derived = Object.entries(counts)
+      .sort(([, a], [, b]) => b - a)
+      .map(([name, count]) => ({
+        name: name.toUpperCase(),
+        version: '',
+        usageLevel: Math.round((count / total) * 100),
+      }));
+    setTools(derived);
+    localStorage.setItem('portfolioTechstack', JSON.stringify(derived));
+    window.dispatchEvent(new CustomEvent('portfolioTechstackChanged'));
+    setStatus({ type: 'success', msg: `CALCULATED — ${derived.length} techs from ${total} projects` });
+    setCalcLoading(false);
+  }
 
   async function scanAllRepos() {
     const stored = localStorage.getItem('portfolioProjects');
@@ -536,9 +567,14 @@ function TechTab() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <p className="text-[12px] text-text-faint tracking-widest uppercase">Tools ({tools.length})</p>
-        <button onClick={scanAllRepos} disabled={scanLoading} className="bg-cobalt/20 border border-cobalt/40 text-cobalt text-[11px] font-bold tracking-widest uppercase px-4 py-1.5 hover:bg-cobalt/30 disabled:opacity-30 transition-colors">
-          {scanLoading ? 'SCANNING...' : 'SCAN_REPOS →'}
-        </button>
+        <div className="flex gap-2">
+          <button onClick={calcFromProjects} disabled={calcLoading} className="bg-cobalt/10 border border-cobalt/30 text-cobalt text-[11px] font-bold tracking-widest uppercase px-3 py-1.5 hover:bg-cobalt/20 disabled:opacity-30 transition-colors">
+            {calcLoading ? 'CALCULATING...' : 'CALC_FROM_PROJECTS'}
+          </button>
+          <button onClick={scanAllRepos} disabled={scanLoading} className="bg-cobalt/20 border border-cobalt/40 text-cobalt text-[11px] font-bold tracking-widest uppercase px-4 py-1.5 hover:bg-cobalt/30 disabled:opacity-30 transition-colors">
+            {scanLoading ? 'SCANNING...' : 'SCAN_REPOS →'}
+          </button>
+        </div>
       </div>
       <div className="border border-white/10 bg-carbono-surface overflow-x-auto">
         <table className="w-full text-xs font-mono">
@@ -677,7 +713,7 @@ function AmbitionsTab() {
 
 /* ─── Experience tab ─── */
 
-const emptyExp: Omit<Experience, 'id'> = { company: '', role: '', period: '', description: '', tech: [], url: '', current: false };
+const emptyExp: Omit<Experience, 'id'> = { company: '', role: '', period: '', description: '', tech: [], url: '', current: false, impact: '', logoUrl: '' };
 
 function ExperienceTab() {
   const [items, setItems] = useState<Experience[]>([]);
@@ -697,7 +733,7 @@ function ExperienceTab() {
 
   function select(exp: Experience) {
     setEditId(exp.id);
-    setForm({ company: exp.company, role: exp.role, period: exp.period, description: exp.description, tech: exp.tech, url: exp.url ?? '', current: exp.current ?? false, techStr: exp.tech.join(', ') });
+    setForm({ company: exp.company, role: exp.role, period: exp.period, description: exp.description, tech: exp.tech, url: exp.url ?? '', current: exp.current ?? false, impact: exp.impact ?? '', logoUrl: exp.logoUrl ?? '', techStr: exp.tech.join(', ') });
     setStatus({ type: 'idle', msg: '' });
   }
 
@@ -705,7 +741,7 @@ function ExperienceTab() {
 
   async function save() {
     if (!form.company.trim() || !form.role.trim()) { setStatus({ type: 'error', msg: 'COMPANY y ROLE requeridos' }); return; }
-    const exp: Experience = { id: editId ?? String(Date.now()), company: form.company.trim().toUpperCase(), role: form.role.trim(), period: form.period.trim(), description: form.description.trim(), tech: form.techStr.split(',').map(t => t.trim().toUpperCase()).filter(Boolean), url: form.url?.trim() || undefined, current: form.current };
+    const exp: Experience = { id: editId ?? String(Date.now()), company: form.company.trim().toUpperCase(), role: form.role.trim(), period: form.period.trim(), description: form.description.trim(), tech: form.techStr.split(',').map(t => t.trim().toUpperCase()).filter(Boolean), url: form.url?.trim() || undefined, current: form.current, impact: form.impact?.trim() || undefined, logoUrl: form.logoUrl?.trim() || undefined };
     setLoading(true);
     try {
       const updated = editId ? items.map(x => x.id === editId ? exp : x) : [...items, exp];
@@ -757,7 +793,11 @@ function ExperienceTab() {
           <Field label="URL (opcional)"><input value={form.url || ''} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} className={input} placeholder="https://company.com" /></Field>
         </div>
         <Field label="Description"><textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} className={`${input} h-16 resize-none`} placeholder="Qué hiciste, qué resolviste..." /></Field>
-        <Field label="Tech (CSV)"><input value={form.techStr} onChange={e => setForm(f => ({ ...f, techStr: e.target.value }))} className={input} placeholder="GO, REACT, DOCKER" /></Field>
+        <Field label="Impact (para recruiters no técnicos)"><textarea value={form.impact ?? ''} onChange={e => setForm(f => ({ ...f, impact: e.target.value }))} className={`${input} h-14 resize-none`} placeholder="Reducí el deploy time un 60%, coordiné un equipo de 5..." /></Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Tech (CSV)"><input value={form.techStr} onChange={e => setForm(f => ({ ...f, techStr: e.target.value }))} className={input} placeholder="GO, REACT, DOCKER" /></Field>
+          <Field label="Logo URL (opcional)"><input value={form.logoUrl ?? ''} onChange={e => setForm(f => ({ ...f, logoUrl: e.target.value }))} className={input} placeholder="https://company.com/logo.png" /></Field>
+        </div>
         <div className="flex items-center gap-2">
           <input type="checkbox" id="current" checked={form.current ?? false} onChange={e => setForm(f => ({ ...f, current: e.target.checked }))} className="accent-cobalt" />
           <label htmlFor="current" className="text-[12px] text-text-muted tracking-widest">Trabajo actual</label>
@@ -781,6 +821,59 @@ const DEFAULT_SETTINGS: SiteSettings = { availabilityValue: 99.9, dustThresholdD
 function SettingsTab() {
   const [settings, setSettings] = useState<SiteSettings>(DEFAULT_SETTINGS);
   const [saved, setSaved] = useState(false);
+  const [cvUploading, setCvUploading] = useState(false);
+  const [cvStatus, setCvStatus] = useState<{ type: 'success' | 'error' | 'idle'; msg: string }>({ type: 'idle', msg: '' });
+
+  async function uploadCv(file: File) {
+    const token = import.meta.env.PUBLIC_GITHUB_TOKEN;
+    const repo  = import.meta.env.PUBLIC_GITHUB_REPO;
+    if (!token || !repo) { setCvStatus({ type: 'error', msg: 'Falta PUBLIC_GITHUB_TOKEN o PUBLIC_GITHUB_REPO' }); return; }
+
+    setCvUploading(true);
+    setCvStatus({ type: 'idle', msg: 'Leyendo archivo...' });
+
+    try {
+      // Read file as base64
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          resolve(result.split(',')[1]); // strip data:...;base64, prefix
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const headers = { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' };
+      const filePath = 'public/cv.pdf';
+      const apiUrl   = `https://api.github.com/repos/${repo}/contents/${filePath}`;
+
+      // Get existing SHA (needed to overwrite)
+      setCvStatus({ type: 'idle', msg: 'Verificando archivo existente...' });
+      let existingSha: string | undefined;
+      const existRes = await fetch(apiUrl, { headers });
+      if (existRes.ok) { const d = await existRes.json(); existingSha = d.sha; }
+
+      // Upload (create or replace)
+      setCvStatus({ type: 'idle', msg: existingSha ? 'Reemplazando CV...' : 'Subiendo CV...' });
+      const body: Record<string, string> = {
+        message: existingSha ? 'cv: replace resume' : 'cv: add resume',
+        content: base64,
+      };
+      if (existingSha) body.sha = existingSha;
+
+      const upRes = await fetch(apiUrl, { method: 'PUT', headers, body: JSON.stringify(body) });
+      if (!upRes.ok) { const err = await upRes.json(); throw new Error(err.message ?? `Upload failed ${upRes.status}`); }
+
+      // Auto-set cvUrl to /cv.pdf and save
+      update({ cvUrl: '/cv.pdf' });
+      setCvStatus({ type: 'success', msg: '✓ CV subido — disponible en /cv.pdf (Vercel redeploya en ~30s)' });
+    } catch (e: unknown) {
+      setCvStatus({ type: 'error', msg: e instanceof Error ? e.message : 'Upload failed' });
+    } finally {
+      setCvUploading(false);
+    }
+  }
 
   useEffect(() => {
     const stored = localStorage.getItem('portfolioSettings');
@@ -795,6 +888,10 @@ function SettingsTab() {
     setSettings(next);
     localStorage.setItem('portfolioSettings', JSON.stringify(next));
     window.dispatchEvent(new CustomEvent('portfolioSettingsChanged'));
+    const keys = Object.keys(partial);
+    if (keys.some(k => !['cvUrl'].includes(k))) {
+      logActivity('INFO', `SETTINGS_UPDATED — ${keys.join(', ')}`);
+    }
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
@@ -821,6 +918,55 @@ function SettingsTab() {
             <option value="BUSY">BUSY</option>
             <option value="OFFLINE">OFFLINE</option>
           </select>
+        </Field>
+
+        {/* CV Upload */}
+        <div className="flex flex-col gap-2">
+          <label className="text-[12px] text-text-faint tracking-widest uppercase">CV / Resume</label>
+
+          {/* File upload */}
+          <label className={`flex items-center gap-3 border border-dashed px-4 py-3 cursor-pointer transition-colors ${cvUploading ? 'border-white/10 opacity-40 pointer-events-none' : 'border-white/20 hover:border-cobalt/60'}`}>
+            <input
+              type="file"
+              accept=".pdf"
+              className="hidden"
+              disabled={cvUploading}
+              onChange={e => { const f = e.target.files?.[0]; if (f) uploadCv(f); e.target.value = ''; }}
+            />
+            <span className="text-[11px] text-cobalt tracking-widest">
+              {cvUploading ? '↑ SUBIENDO...' : '↑ SUBIR PDF'}
+            </span>
+            <span className="text-[10px] text-text-faint/60">
+              {settings.cvUrl === '/cv.pdf' ? 'cv.pdf ya subido — reemplazar' : 'seleccioná un .pdf'}
+            </span>
+          </label>
+
+          {cvStatus.msg && (
+            <p className={`text-[11px] tracking-widest ${cvStatus.type === 'success' ? 'text-cobalt' : cvStatus.type === 'error' ? 'text-err' : 'text-text-faint animate-pulse'}`}>
+              {cvStatus.msg}
+            </p>
+          )}
+
+          {/* Manual URL fallback */}
+          <div className="flex flex-col gap-1 mt-1">
+            <span className="text-[10px] text-text-faint/50 tracking-widest">o usá una URL externa</span>
+            <input
+              value={settings.cvUrl ?? ''}
+              onChange={e => update({ cvUrl: e.target.value.trim() || undefined })}
+              className={input}
+              placeholder="https://drive.google.com/..."
+            />
+          </div>
+          <p className="text-[10px] text-text-faint/50">Aparece como botón ↓ DOWNLOAD CV y como comando <code className="text-cobalt">wget cv.pdf</code> en la terminal</p>
+        </div>
+
+        <Field label="LinkedIn URL">
+          <input
+            value={settings.linkedinUrl ?? ''}
+            onChange={e => update({ linkedinUrl: e.target.value.trim() || undefined })}
+            className={input}
+            placeholder="https://linkedin.com/in/tu-perfil"
+          />
         </Field>
       </div>
 
@@ -975,6 +1121,7 @@ function PublishTab() {
         files: toCommit.map(f => f.label),
       };
       saveBuild(entry);
+      logActivity('MILESTONE', `PUBLISHED build #${buildNum} — ${toCommit.map(f => f.label).join(', ')}`);
       setStatus({ type: 'success', msg: `BUILD #${buildNum} — SUCCESS — Vercel redeploya en ~30s` });
     } catch (e: unknown) {
       const entry: BuildEntry = {

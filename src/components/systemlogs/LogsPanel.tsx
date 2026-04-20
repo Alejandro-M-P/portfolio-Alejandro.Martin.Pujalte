@@ -106,6 +106,24 @@ function execute(raw: string, close: () => void): string[] {
     case 'clear': return ['__CLEAR__'];
     case 'exit': close(); return [];
 
+    case 'wget': {
+      const target = args[0] ?? '';
+      if (target === 'cv.pdf' || target === 'cv' || target === 'resume.pdf') {
+        let cvUrl: string | undefined;
+        try { cvUrl = JSON.parse(localStorage.getItem('portfolioSettings') ?? '{}').cvUrl; } catch {}
+        if (!cvUrl) return [e('wget: cv.pdf: No such URL configured'), o('Set a CV URL in the admin panel → Settings → CV URL')];
+        const a = document.createElement('a');
+        a.href = cvUrl; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.click();
+        return [
+          o(`--${new Date().toISOString().slice(11, 19)}-- ${cvUrl}`),
+          o('Resolving...'),
+          g('HTTP request sent, awaiting response... 200 OK'),
+          g('✓ cv.pdf opened.'),
+        ];
+      }
+      return [e(`wget: ${target}: No such target. Try: wget cv.pdf`)];
+    }
+
     case 'hire-me': return [
       g('Initializing hire sequence...'),
       o('[████████████████████] 100%'),
@@ -413,14 +431,21 @@ export default function LogsPanel({ logs, logLimit = 10 }: Props) {
       {/* Header — changes with mode */}
       <div
         className={[
-          'border-b border-white/10 px-4 py-3 flex items-center gap-3 bg-carbono shrink-0 transition-colors duration-200',
+          'border-b border-white/10 px-4 py-3 flex items-center gap-3 bg-carbono shrink-0 transition-colors duration-200 group',
           mode === 'logs' ? 'cursor-pointer hover:bg-carbono/20' : '',
         ].join(' ')}
         onClick={mode === 'logs' ? enterTerminal : undefined}
       >
-        <span className={`text-xs text-text-faint tracking-widest uppercase ${phase !== 'idle' ? 'hdr-glitch' : ''}`}>
-          {mode === 'logs' ? 'SYSTEM LOGS >_' : 'BUNKER TERMINAL >_'}
-        </span>
+        <div className={`flex items-center gap-3 ${phase !== 'idle' ? 'hdr-glitch' : ''}`}>
+          <span className="text-xs text-text-faint tracking-widest uppercase">
+            {mode === 'logs' ? 'SYSTEM LOGS' : 'BUNKER TERMINAL'}
+          </span>
+          {mode === 'logs' && (
+            <span className="text-[9px] border border-white/15 px-2 py-0.5 text-white/30 tracking-widest uppercase group-hover:text-cobalt/60 transition-colors">
+              &gt;_ open terminal
+            </span>
+          )}
+        </div>
 
         <div className="flex gap-1.5 ml-auto">
           <div className="w-2 h-2 bg-err/60" />

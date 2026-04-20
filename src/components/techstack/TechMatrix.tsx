@@ -66,15 +66,18 @@ export default function TechMatrix() {
 
   useEffect(() => {
     const loadTechStack = () => {
-      // Try to load from localStorage first
-      const stored = localStorage.getItem('portfolioProjects');
-      if (stored) {
-        const projects: Project[] = JSON.parse(stored);
-        if (projects?.length) setTools(deriveFromProjects(projects));
-        return;
+      // Admin overrides take precedence
+      const adminStored = localStorage.getItem('portfolioTechstack');
+      if (adminStored) {
+        const adminTools: TechTool[] = JSON.parse(adminStored);
+        if (adminTools?.length) { setTools(adminTools); return; }
       }
-      
-      // Fallback to fetch from public/data if localStorage is empty
+      // Derive from projects as fallback
+      const projectStored = localStorage.getItem('portfolioProjects');
+      if (projectStored) {
+        const projects: Project[] = JSON.parse(projectStored);
+        if (projects?.length) { setTools(deriveFromProjects(projects)); return; }
+      }
       fetch('/data/projects.json')
         .then(r => r.ok ? r.json() : null)
         .then((projects: Project[] | null) => {
@@ -83,18 +86,21 @@ export default function TechMatrix() {
         .catch(() => {});
     };
 
-    // Initial load
     loadTechStack();
 
-    // Listen for data updates from admin panel
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'portfolioProjects' || e.key === 'lastDataUpdate') {
+      if (['portfolioProjects', 'portfolioTechstack', 'lastDataUpdate'].includes(e.key ?? '')) {
         loadTechStack();
       }
     };
+    const handleCustom = () => loadTechStack();
 
     window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+    window.addEventListener('portfolioTechstackChanged', handleCustom);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('portfolioTechstackChanged', handleCustom);
+    };
   }, []);
 
   if (!tools.length) {

@@ -135,9 +135,14 @@ interface LogTerminalProps {
   hideHeader?: boolean;
 }
 
+function getActivityLog(): LogEntry[] {
+  try { return JSON.parse(localStorage.getItem('portfolioActivityLog') ?? '[]'); } catch { return []; }
+}
+
 export default function LogTerminal({ logs, logLimit = 10, hideHeader = false }: LogTerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [liveEntries, setLiveEntries] = useState<LogEntry[]>([]);
+  const [liveEntries, setLiveEntries]     = useState<LogEntry[]>([]);
+  const [activityEntries, setActivityEntries] = useState<LogEntry[]>(getActivityLog());
   const [fetching, setFetching] = useState(false);
   const [lastFetch, setLastFetch] = useState<string | null>(null);
 
@@ -200,12 +205,19 @@ export default function LogTerminal({ logs, logLimit = 10, hideHeader = false }:
       fetchGitHubActivity(false);
       refreshProjectsFromGitHub();
     }, POLL_MS);
-    return () => clearInterval(interval);
+
+    const onActivity = () => setActivityEntries(getActivityLog());
+    window.addEventListener('portfolioActivityLogged', onActivity);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('portfolioActivityLogged', onActivity);
+    };
   }, []);
 
-const combined: LogEntry[] = [...logs, ...liveEntries]
-     .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
-     .slice(-logLimit);
+  const combined: LogEntry[] = [...logs, ...liveEntries, ...activityEntries]
+    .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+    .slice(-logLimit);
 
   useEffect(() => {
     if (containerRef.current) {

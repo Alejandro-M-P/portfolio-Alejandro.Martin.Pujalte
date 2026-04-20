@@ -44,10 +44,12 @@ export default function ProjectGrid() {
 
   return (
     <>
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-        {projects.map(p => (
-          <ProjectCard key={p.id} project={p} onClick={setSelected} />
-        ))}
+      <div className="@container">
+        <div className="grid grid-cols-1 @xs:grid-cols-2 @md:grid-cols-3 gap-2">
+          {projects.map(p => (
+            <ProjectCard key={p.id} project={p} onClick={setSelected} />
+          ))}
+        </div>
       </div>
       <ProjectModal project={selected} onClose={() => setSelected(null)} />
     </>

@@ -91,7 +91,7 @@ export default function ProjectCard({ project, onClick }: ProjectCardProps) {
           onClick={() => onClick(project)}
         >
           {/* Image */}
-          <div className="relative aspect-video overflow-hidden bg-carbono-mid">
+          <div className="relative aspect-[3/2] overflow-hidden bg-carbono-mid">
             {project.photo ? (
               <img
                 src={project.photo}
@@ -108,10 +108,13 @@ export default function ProjectCard({ project, onClick }: ProjectCardProps) {
 
             {/* REDACTED overlay */}
             {project.isPrivate && (
-              <div className="absolute inset-0 redacted-stripes flex items-center justify-center">
+              <div className="absolute inset-0 redacted-stripes flex flex-col items-center justify-center gap-2">
                 <div className="border-2 border-err/70 px-3 py-1 bg-carbono/70" style={{ transform: 'rotate(-8deg)' }}>
-                  <span className="text-err text-[10px] font-bold tracking-[0.3em] uppercase">ACCESO RESTRINGIDO</span>
+                  <span className="text-err text-[10px] font-bold tracking-[0.3em] uppercase">CLASSIFIED</span>
                 </div>
+                <span className="text-[9px] text-white/40 tracking-widest text-center px-4">
+                  Private client project · NDA
+                </span>
               </div>
             )}
 
@@ -137,9 +140,10 @@ export default function ProjectCard({ project, onClick }: ProjectCardProps) {
               )}
             </div>
 
-            {hasVideo && (
-              <div className="absolute top-2 right-2 w-6 h-6 bg-black/60 border border-white/20 flex items-center justify-center">
-                <span className="text-[10px] text-white">▶</span>
+            {stars > 0 && (
+              <div className="absolute top-2 right-2 flex items-center gap-1 bg-black/70 border border-white/25 px-2 py-1">
+                <span className={`text-xs ${isGold ? 'text-bronze' : 'text-warn'}`}>★</span>
+                <span className="text-xs text-white font-mono font-bold">{stars}</span>
               </div>
             )}
 
@@ -147,17 +151,16 @@ export default function ProjectCard({ project, onClick }: ProjectCardProps) {
           </div>
 
           {/* Card body */}
-          <div className="p-3">
-            <p className={`text-xs font-bold tracking-widest mb-2 uppercase ${isGold ? 'text-bronze' : 'text-white'}`}>
+          <div className="p-2">
+            <p className={`text-[11px] font-bold tracking-widest mb-1.5 uppercase ${isGold ? 'text-bronze' : 'text-white'}`}>
               {project.name}
             </p>
 
             {/* Pod indicators */}
-            <div className="flex gap-3 mb-2">
+            <div className="flex gap-2 mb-1.5">
               <span className="text-[9px] tracking-widest text-[#22c55e]">
                 <span className="animate-pulse">●</span> RUNNING
               </span>
-              <span className="text-[9px] tracking-widest text-text-faint">UP:{uptime}</span>
               <span className="text-[9px] tracking-widest text-text-faint">IMG:{mainImage}</span>
             </div>
 

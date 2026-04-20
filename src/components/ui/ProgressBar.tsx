@@ -14,7 +14,7 @@ export default function ProgressBar({ value, segments = 10, className = '' }: Pr
       {Array.from({ length: segments }, (_, i) => (
         <div
           key={i}
-          className={`w-3 h-4 ${i < filled ? 'bg-cobalt' : 'bg-carbono-high border border-white/20'}`}
+          className={`flex-1 h-4 ${i < filled ? 'bg-cobalt' : 'bg-carbono-high border border-white/20'}`}
         />
       ))}
     </div>

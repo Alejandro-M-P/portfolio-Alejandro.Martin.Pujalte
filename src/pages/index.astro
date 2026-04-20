@@ -10,20 +10,24 @@ import { logs, ambitions, techStack, identity } from '../data/portfolio';
 ---
 
 <BaseLayout>
-  <div class="w-full px-4 sm:px-6 lg:px-8 py-6">
-    <div class="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-6 lg:gap-8 items-start">
+  <!--
+    Mobile:  flex-col natural, page scrolls, sections flow freely
+    Desktop: two-column grid, NO page scroll, each section panel has its own scroll
+  -->
+  <div class="w-full px-4 sm:px-6 lg:px-8 py-4 lg:py-0 lg:h-[calc(100vh-3rem)] lg:overflow-hidden">
+    <div class="flex flex-col lg:grid lg:grid-cols-[360px_1fr] lg:h-full gap-6 lg:gap-6">
 
-      <!-- LEFT: display:contents en mobile → sticky flex column en desktop -->
-      <div class="contents lg:flex lg:flex-col lg:gap-5 lg:sticky lg:top-[3.5rem] lg:h-[calc(100vh-3.5rem)]">
+      <!-- ── LEFT column ─────────────────────────────────────── -->
+      <div class="flex flex-col gap-4 lg:h-full lg:overflow-hidden lg:py-4">
 
-        <div class="order-1 lg:order-none lg:flex-shrink-0">
+        <div class="lg:flex-shrink-0">
           <IdentitySection {...identity} client:load />
         </div>
 
-        <div class="order-5 lg:order-none lg:flex lg:flex-col lg:flex-1 lg:min-h-0" id="logs">
-          <div class="mb-3.5 pb-2 border-b border-white/[0.08] relative z-[1]">
-            <h2 class="text-[1.1rem] font-bold text-[#f0eeec] uppercase tracking-[0.04em] font-mono">System Logs</h2>
-            <p class="text-[10px] text-white/30 tracking-widest mt-0.5">Real-time activity feed — commits, merges and releases from my public repos, polled every 2h via GitHub API.</p>
+        <!-- System Logs: desktop only, fills remaining height -->
+        <div class="hidden lg:flex lg:flex-col lg:flex-1 lg:min-h-0" id="logs">
+          <div class="mb-2 pb-2 border-b border-white/[0.08] flex-shrink-0">
+            <h2 class="text-[0.85rem] font-bold text-[#f0eeec] uppercase tracking-[0.04em] font-mono">System Logs</h2>
           </div>
           <div class="flex-1 min-h-0">
             <LogsPanel logs={logs} client:load />
@@ -32,41 +36,52 @@ import { logs, ambitions, techStack, identity } from '../data/portfolio';
 
       </div>
 
-      <!-- RIGHT: display:contents en mobile → flex column en desktop -->
-      <div class="contents lg:flex lg:flex-col lg:gap-8">
+      <!-- ── RIGHT column: flex-col, each section is a scrollable panel ─── -->
+      <!--
+        Desktop: sections are flex children with min-h-0, content scrolls inside.
+        flex-[N] controls relative height weight.
+        Mobile: sections flow naturally, page scrolls.
+      -->
+      <div class="flex flex-col gap-4 lg:h-full lg:py-4 lg:pr-1">
 
-        <section id="experience" class="order-2 lg:order-none">
-          <div class="flex items-baseline gap-3 mb-3.5 pb-2 border-b border-white/[0.08] relative z-[1]">
-            <h2 class="text-[1.1rem] font-bold text-[#f0eeec] uppercase tracking-[0.04em] font-mono">Experience</h2>
+        <!-- Experience — flex-[2] → ~25% of height -->
+        <section id="experience" class="flex flex-col lg:flex-[2] lg:min-h-0">
+          <div class="mb-2 pb-2 border-b border-white/[0.08] flex-shrink-0">
+            <h2 class="text-[0.85rem] font-bold text-[#f0eeec] uppercase tracking-[0.04em] font-mono">Experience</h2>
           </div>
-          <div class="max-h-[420px] overflow-y-auto">
+          <div class="lg:flex-1 lg:overflow-y-auto lg:min-h-0">
             <ExperienceSection client:load />
           </div>
         </section>
 
-        <section id="deployments" class="order-3 lg:order-none">
-          <div class="flex items-baseline gap-3 mb-3.5 pb-2 border-b border-white/[0.08] relative z-[1]">
-            <h2 class="text-[1.1rem] font-bold text-[#f0eeec] uppercase tracking-[0.04em] font-mono">Projects</h2>
+        <!-- Projects — flex-[3] → ~38% of height -->
+        <section id="deployments" class="flex flex-col lg:flex-[3] lg:min-h-0">
+          <div class="mb-2 pb-2 border-b border-white/[0.08] flex-shrink-0">
+            <h2 class="text-[0.85rem] font-bold text-[#f0eeec] uppercase tracking-[0.04em] font-mono">Projects</h2>
           </div>
-          <div class="max-h-[520px] overflow-y-auto">
+          <div class="lg:flex-1 lg:overflow-y-auto lg:min-h-0">
             <ProjectGrid client:visible />
           </div>
         </section>
 
-        <section id="tech" class="order-4 lg:order-none">
-          <div class="flex items-baseline gap-3 mb-3.5 pb-2 border-b border-white/[0.08] relative z-[1]">
-            <h2 class="text-[1.1rem] font-bold text-[#f0eeec] uppercase tracking-[0.04em] font-mono">Technologies & Tools</h2>
+        <!-- Tech — flex-[2] → ~25% of height -->
+        <section id="tech" class="flex flex-col lg:flex-[2] lg:min-h-0">
+          <div class="mb-2 pb-2 border-b border-white/[0.08] flex-shrink-0">
+            <h2 class="text-[0.85rem] font-bold text-[#f0eeec] uppercase tracking-[0.04em] font-mono">Technologies & Tools</h2>
           </div>
-          <div class="max-h-[268px] overflow-y-auto">
+          <div class="lg:flex-1 lg:overflow-y-auto lg:min-h-0">
             <TechMatrix tools={techStack} client:load />
           </div>
         </section>
 
-        <section id="ambitions" class="order-6 lg:order-none">
-          <div class="flex items-baseline gap-3 mb-3.5 pb-2 border-b border-white/[0.08] relative z-[1]">
-            <h2 class="text-[1.1rem] font-bold text-[#f0eeec] uppercase tracking-[0.04em] font-mono">Ambitions</h2>
+        <!-- Ambitions: desktop only, flex-[1] → remaining space -->
+        <section id="ambitions" class="hidden lg:flex lg:flex-col lg:flex-[1] lg:min-h-0 pb-2">
+          <div class="mb-2 pb-2 border-b border-white/[0.08] flex-shrink-0">
+            <h2 class="text-[0.85rem] font-bold text-[#f0eeec] uppercase tracking-[0.04em] font-mono">Ambitions</h2>
           </div>
-          <Roadmap ambitions={ambitions} client:idle />
+          <div class="lg:flex-1 lg:overflow-y-auto lg:min-h-0">
+            <Roadmap ambitions={ambitions} client:idle />
+          </div>
         </section>
 
       </div>

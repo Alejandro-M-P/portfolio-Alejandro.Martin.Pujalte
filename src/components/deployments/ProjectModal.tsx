@@ -9,16 +9,32 @@ interface ProjectModalProps {
 
 marked.use({ gfm: true, breaks: true });
 
-async function fetchReadme(repoSlug: string): Promise<string> {
+function ghHeaders(): Record<string, string> {
   const token = import.meta.env.PUBLIC_GITHUB_TOKEN;
-  const headers: Record<string, string> = { Accept: 'application/vnd.github+json' };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  const res = await fetch(`https://api.github.com/repos/${repoSlug}/readme`, { headers });
+  const h: Record<string, string> = { Accept: 'application/vnd.github+json' };
+  if (token) h['Authorization'] = `Bearer ${token}`;
+  return h;
+}
+
+function decodeBase64(content: string): string {
+  const binary = atob(content.replace(/\n/g, ''));
+  return new TextDecoder('utf-8').decode(Uint8Array.from(binary, c => c.charCodeAt(0)));
+}
+
+async function fetchReadme(repoSlug: string): Promise<string> {
+  const res = await fetch(`https://api.github.com/repos/${repoSlug}/readme`, { headers: ghHeaders() });
   if (!res.ok) throw new Error(`README not found (${res.status})`);
   const data = await res.json();
-  const binary = atob(data.content.replace(/\n/g, ''));
-  const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
-  return new TextDecoder('utf-8').decode(bytes);
+  return decodeBase64(data.content);
+}
+
+async function fetchRepoFile(repoSlug: string, path: string): Promise<{ content: string; isMd: boolean }> {
+  const res = await fetch(`https://api.github.com/repos/${repoSlug}/contents/${path}`, { headers: ghHeaders() });
+  if (!res.ok) throw new Error(`File not found: ${path} (${res.status})`);
+  const data = await res.json();
+  if (data.type !== 'file') throw new Error(`${path} is not a file`);
+  const raw = decodeBase64(data.content);
+  return { content: raw, isMd: /\.(md|mdx|markdown)$/i.test(path) };
 }
 
 type Tab = 'readme' | 'stack' | 'specs' | 'media';
@@ -52,24 +68,55 @@ function VideoEmbed({ url }: { url: string }) {
 }
 
 export default function ProjectModal({ project, onClose }: ProjectModalProps) {
-  const [tab, setTab] = useState<Tab>('readme');
+  const [tab, setTab]       = useState<Tab>('readme');
   const [readme, setReadme] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError]   = useState<string | null>(null);
+  // Inline file navigation: stack of { path, content, isMd }
+  const [fileStack, setFileStack] = useState<{ path: string; content: string; isMd: boolean }[]>([]);
+  const readmeBodyRef = React.useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!project) { setTab('readme'); setReadme(null); return; }
+    if (!project) { setTab('readme'); setReadme(null); setFileStack([]); return; }
     const repoSlug = project.specs?.repoSlug as string | undefined;
     if (!repoSlug) { setTab('specs'); return; }
     setTab('readme');
     setReadme(null);
     setError(null);
+    setFileStack([]);
     setLoading(true);
     fetchReadme(repoSlug)
       .then(md => setReadme(md))
       .catch(e => { setError(e.message); setTab('specs'); })
       .finally(() => setLoading(false));
   }, [project?.id]);
+
+  // Intercept clicks on relative links inside readme-content
+  useEffect(() => {
+    const container = readmeBodyRef.current;
+    if (!container || !project) return;
+    const repoSlug = project.specs?.repoSlug as string | undefined;
+    if (!repoSlug) return;
+
+    const handler = (e: MouseEvent) => {
+      const a = (e.target as HTMLElement).closest('a');
+      if (!a) return;
+      const href = a.getAttribute('href') ?? '';
+      // Match links we constructed pointing to GitHub blob
+      const match = href.match(/github\.com\/[^/]+\/[^/]+\/blob\/main\/(.+)$/);
+      if (!match) return;
+      e.preventDefault();
+      const filePath = decodeURIComponent(match[1]);
+      setLoading(true);
+      fetchRepoFile(repoSlug, filePath)
+        .then(result => setFileStack(prev => [...prev, { path: filePath, ...result }]))
+        .catch(err => setError(err.message))
+        .finally(() => setLoading(false));
+    };
+
+    container.addEventListener('click', handler);
+    return () => container.removeEventListener('click', handler);
+  }, [readme, fileStack.length, project]);
 
   useEffect(() => {
     if (!project) return;
@@ -80,10 +127,29 @@ export default function ProjectModal({ project, onClose }: ProjectModalProps) {
 
   if (!project) return null;
 
-  const hasRepo = !!(project.specs?.repoSlug);
-  const hasVideo = !!(project.specs?.video);
-  const status = project.specs?.status as string | undefined;
-  const html = readme ? marked.parse(readme) as string : '';
+  const hasRepo    = !!(project.specs?.repoSlug);
+  const hasVideo   = !!(project.specs?.video);
+  const status     = project.specs?.status as string | undefined;
+  const repoSlug   = project.specs?.repoSlug as string | undefined;
+  const repoBase   = repoSlug ? `https://github.com/${repoSlug}/blob/main/` : '';
+
+  function renderMarkdown(md: string): string {
+    return (marked.parse(md) as string)
+      .replace(/href="(?!https?:\/\/|#|mailto:)([^"]+)"/g, (_, p) =>
+        `href="${repoBase}${p.replace(/^\.\//, '')}"`)
+      .replace(/<a(\s)/g, '<a target="_blank" rel="noopener noreferrer"$1')
+      .replace(/<img(\s)/g, '<img loading="lazy" decoding="async"$1');
+  }
+
+  // Current file being shown: either a file from the stack or the root README
+  const currentFile = fileStack[fileStack.length - 1];
+  const displayHtml = currentFile
+    ? currentFile.isMd
+      ? renderMarkdown(currentFile.content)
+      : `<pre class="text-xs text-text-muted overflow-x-auto whitespace-pre-wrap">${currentFile.content.replace(/</g, '&lt;')}</pre>`
+    : readme
+      ? renderMarkdown(readme)
+      : '';
   const specsEntries = Object.entries(project.specs || {}).filter(([k]) => !['repoSlug', 'video', 'status'].includes(k));
 
   return (
@@ -125,19 +191,52 @@ export default function ProjectModal({ project, onClose }: ProjectModalProps) {
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto" ref={readmeBodyRef}>
           {/* README tab */}
           {tab === 'readme' && (
             <>
-              {loading && (
-                <div className="flex items-center justify-center h-32 text-xs text-text-faint tracking-widest animate-pulse">
-                  FETCHING_README...
+              {/* Breadcrumb for inline file navigation */}
+              {(fileStack.length > 0) && (
+                <div className="flex items-center gap-1 px-5 pt-3 pb-0 text-[10px] tracking-widest flex-wrap">
+                  <button
+                    onClick={() => setFileStack([])}
+                    className="text-cobalt hover:text-cobalt-light transition-colors"
+                  >
+                    README
+                  </button>
+                  {fileStack.map((f, i) => (
+                    <React.Fragment key={f.path}>
+                      <span className="text-text-faint/40">›</span>
+                      {i < fileStack.length - 1 ? (
+                        <button
+                          onClick={() => setFileStack(prev => prev.slice(0, i + 1))}
+                          className="text-cobalt hover:text-cobalt-light transition-colors"
+                        >
+                          {f.path.split('/').pop()}
+                        </button>
+                      ) : (
+                        <span className="text-text-faint">{f.path.split('/').pop()}</span>
+                      )}
+                    </React.Fragment>
+                  ))}
+                  <button
+                    onClick={() => setFileStack(prev => prev.slice(0, -1))}
+                    className="ml-auto text-text-faint/60 hover:text-white transition-colors"
+                  >
+                    ← back
+                  </button>
                 </div>
               )}
-              {!loading && readme && (
+
+              {loading && (
+                <div className="flex items-center justify-center h-32 text-xs text-text-faint tracking-widest animate-pulse">
+                  FETCHING...
+                </div>
+              )}
+              {!loading && (readme || currentFile) && (
                 <div
                   className="p-5 readme-content"
-                  dangerouslySetInnerHTML={{ __html: html }}
+                  dangerouslySetInnerHTML={{ __html: displayHtml }}
                 />
               )}
               {!loading && error && (
@@ -190,6 +289,15 @@ export default function ProjectModal({ project, onClose }: ProjectModalProps) {
           {/* SPECS tab */}
           {tab === 'specs' && (
             <div className="p-5 flex flex-col gap-5">
+              {project.isPrivate && (
+                <div className="border border-err/20 bg-err/5 px-4 py-3 flex items-start gap-3">
+                  <span className="text-err text-xs">⊘</span>
+                  <div>
+                    <p className="text-xs text-err font-bold tracking-widest uppercase">Private client project</p>
+                    <p className="text-[11px] text-text-faint mt-0.5">This project was built under NDA. Repository, source code and full specs are not publicly available.</p>
+                  </div>
+                </div>
+              )}
               <div>
                 <p className="text-[10px] text-cobalt tracking-widest uppercase mb-2">// Architecture</p>
                 <p className="text-xs text-text-muted leading-relaxed">{project.architecture || 'N/A'}</p>

@@ -82,7 +82,7 @@ body {
 .readme-content table { width: 100%; border-collapse: collapse; margin: 0.5rem 0; font-size: 0.7rem; }
 .readme-content th { border: 1px solid rgba(255,255,255,0.1); padding: 0.35rem 0.5rem; color: #f0eeec; text-align: left; background: #222222; }
 .readme-content td { border: 1px solid rgba(255,255,255,0.06); padding: 0.35rem 0.5rem; }
-.readme-content img { max-width: 100%; filter: grayscale(30%); margin: 0.5rem 0; }
+.readme-content img { max-width: 100%; filter: grayscale(30%); margin: 0.5rem 0; min-height: 60px; background: #222222; }
 .readme-content hr { border: none; border-top: 1px solid rgba(255,255,255,0.08); margin: 0.75rem 0; }
 
 /* CRT flicker for bronze/gold projects */

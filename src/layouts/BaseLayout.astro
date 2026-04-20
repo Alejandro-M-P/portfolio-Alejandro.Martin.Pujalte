@@ -24,15 +24,11 @@ const siteUrl = Astro.site ?? 'https://alejandro-mp.dev';
     <meta name="generator" content={Astro.generator} />
     <title>{title}</title>
     <meta name="description" content={description} />
-
-    <!-- Open Graph -->
     <meta property="og:type" content="website" />
     <meta property="og:url" content={siteUrl} />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:image" content={new URL(ogImage, siteUrl).toString()} />
-
-    <!-- Twitter / X -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
@@ -47,14 +43,13 @@ const siteUrl = Astro.site ?? 'https://alejandro-mp.dev';
           ALEJANDRO.MP
         </a>
 
+        <!-- Desktop links -->
         <div class="hidden md:flex items-center gap-5 text-xs text-text-muted tracking-widest uppercase">
           <a href="#experience" class="hover:text-cobalt transition-colors duration-100">Experience</a>
           <span class="text-white/20">|</span>
           <a href="#deployments" class="hover:text-cobalt transition-colors duration-100">Projects</a>
           <span class="text-white/20">|</span>
           <a href="#tech" class="hover:text-cobalt transition-colors duration-100">Tech</a>
-          <span class="text-white/20">|</span>
-          <a href="#logs" class="hover:text-cobalt transition-colors duration-100">Logs</a>
           <span class="text-white/20">|</span>
           <a href="#ambitions" class="hover:text-cobalt transition-colors duration-100">Ambitions</a>
         </div>
@@ -65,29 +60,68 @@ const siteUrl = Astro.site ?? 'https://alejandro-mp.dev';
             <span>ONLINE</span>
           </div>
           <span class="hidden sm:inline text-white/20">|</span>
-          <a href="/admin" class="text-xs text-text-faint tracking-widest hover:text-white transition-colors">ADMIN</a>
+          <a href="/admin" class="hidden md:inline text-xs text-text-faint tracking-widest hover:text-white transition-colors">ADMIN</a>
+
+          <!-- Hamburger (mobile only) -->
+          <button
+            id="hamburger"
+            class="md:hidden flex flex-col gap-1.5 p-1 text-text-faint hover:text-white transition-colors"
+            aria-label="Menu"
+          >
+            <span class="block w-5 h-px bg-current transition-all duration-200" id="bar1"></span>
+            <span class="block w-5 h-px bg-current transition-all duration-200" id="bar2"></span>
+            <span class="block w-5 h-px bg-current transition-all duration-200" id="bar3"></span>
+          </button>
         </div>
 
       </div>
     </nav>
 
-    <div class="fixed top-12 left-0 right-0 z-40 md:hidden border-b border-white/5 bg-carbono/90 backdrop-blur-md overflow-x-auto">
-      <div class="flex items-center gap-4 px-4 py-2 text-[10px] text-text-faint tracking-widest uppercase whitespace-nowrap">
-        <a href="#experience" class="hover:text-cobalt transition-colors">Experience</a>
-        <span class="text-white/20">|</span>
-        <a href="#deployments" class="hover:text-cobalt transition-colors">Projects</a>
-        <span class="text-white/20">|</span>
-        <a href="#tech" class="hover:text-cobalt transition-colors">Tech</a>
-        <span class="text-white/20">|</span>
-        <a href="#logs" class="hover:text-cobalt transition-colors">Logs</a>
-        <span class="text-white/20">|</span>
-        <a href="#ambitions" class="hover:text-cobalt transition-colors">Ambitions</a>
+    <!-- Mobile dropdown menu -->
+    <div
+      id="mobile-menu"
+      class="fixed top-12 left-0 right-0 z-40 md:hidden border-b border-white/10 bg-carbono/95 backdrop-blur-md hidden"
+    >
+      <div class="flex flex-col px-6 py-4 gap-4">
+        <a href="#experience" class="mobile-link text-sm text-text-muted tracking-widest uppercase hover:text-cobalt transition-colors">Experience</a>
+        <a href="#deployments" class="mobile-link text-sm text-text-muted tracking-widest uppercase hover:text-cobalt transition-colors">Projects</a>
+        <a href="#tech" class="mobile-link text-sm text-text-muted tracking-widest uppercase hover:text-cobalt transition-colors">Tech</a>
+        <a href="#ambitions" class="mobile-link text-sm text-text-muted tracking-widest uppercase hover:text-cobalt transition-colors">Ambitions</a>
+        <div class="border-t border-white/10 pt-3">
+          <a href="/admin" class="text-xs text-text-faint tracking-widest hover:text-white transition-colors">ADMIN PANEL →</a>
+        </div>
       </div>
     </div>
 
-    <main class="pt-12 md:pt-12">
+    <main class="pt-12">
       <slot />
     </main>
+
+    <script>
+      const hamburger = document.getElementById('hamburger');
+      const menu      = document.getElementById('mobile-menu');
+      const bar1      = document.getElementById('bar1');
+      const bar2      = document.getElementById('bar2');
+      const bar3      = document.getElementById('bar3');
+
+      let open = false;
+
+      function toggle() {
+        open = !open;
+        menu?.classList.toggle('hidden', !open);
+        // Animate bars to X
+        if (bar1) bar1.style.transform = open ? 'translateY(7px) rotate(45deg)' : '';
+        if (bar2) bar2.style.opacity   = open ? '0' : '1';
+        if (bar3) bar3.style.transform = open ? 'translateY(-7px) rotate(-45deg)' : '';
+      }
+
+      hamburger?.addEventListener('click', toggle);
+
+      // Close on link click
+      document.querySelectorAll('.mobile-link').forEach(link => {
+        link.addEventListener('click', () => { if (open) toggle(); });
+      });
+    </script>
 
   </body>
 </html>
