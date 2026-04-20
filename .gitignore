@@ -1,3 +1,5 @@
+.gcourer/
+
 # pnpm
 .pnpm-store/
 
@@ -25,3 +27,4 @@ pnpm-debug.log*
 
 # jetbrains setting folder
 .idea/
+

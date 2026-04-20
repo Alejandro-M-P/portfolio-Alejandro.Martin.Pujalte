@@ -1,0 +1,93 @@
+---
+import '../styles/global.css';
+
+interface Props {
+  title?: string;
+  description?: string;
+}
+
+const {
+  title = 'ALEJANDRO.MARTIN.PUJALTE — Systems Architect',
+  description = 'Senior Systems Architect and Full-Stack Engineer specializing in high-availability infrastructure, local AI tooling, and structurally honest architectures.',
+} = Astro.props;
+
+const ogImage = '/profile.jpg';
+const siteUrl = Astro.site ?? 'https://alejandro-mp.dev';
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="generator" content={Astro.generator} />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content={siteUrl} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content={new URL(ogImage, siteUrl).toString()} />
+
+    <!-- Twitter / X -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={new URL(ogImage, siteUrl).toString()} />
+  </head>
+  <body class="bg-carbono text-text-primary font-mono">
+
+    <nav class="fixed top-0 left-0 right-0 z-50 border-b border-white/10 bg-carbono/80 backdrop-blur-md h-12">
+      <div class="w-full px-4 sm:px-6 lg:px-8 h-full flex items-center justify-between">
+
+        <a href="/" class="text-sm font-bold tracking-widest text-white hover:text-cobalt transition-colors duration-100 flex-shrink-0">
+          ALEJANDRO.MP
+        </a>
+
+        <div class="hidden md:flex items-center gap-5 text-xs text-text-muted tracking-widest uppercase">
+          <a href="#experience" class="hover:text-cobalt transition-colors duration-100">Experience</a>
+          <span class="text-white/20">|</span>
+          <a href="#deployments" class="hover:text-cobalt transition-colors duration-100">Projects</a>
+          <span class="text-white/20">|</span>
+          <a href="#tech" class="hover:text-cobalt transition-colors duration-100">Tech</a>
+          <span class="text-white/20">|</span>
+          <a href="#logs" class="hover:text-cobalt transition-colors duration-100">Logs</a>
+          <span class="text-white/20">|</span>
+          <a href="#ambitions" class="hover:text-cobalt transition-colors duration-100">Ambitions</a>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <div class="hidden sm:flex items-center gap-1.5 text-xs text-text-faint tracking-widest">
+            <span class="w-1.5 h-1.5 bg-cobalt animate-pulse inline-block" style="border-radius:50%"></span>
+            <span>ONLINE</span>
+          </div>
+          <span class="hidden sm:inline text-white/20">|</span>
+          <a href="/admin" class="text-xs text-text-faint tracking-widest hover:text-white transition-colors">ADMIN</a>
+        </div>
+
+      </div>
+    </nav>
+
+    <div class="fixed top-12 left-0 right-0 z-40 md:hidden border-b border-white/5 bg-carbono/90 backdrop-blur-md overflow-x-auto">
+      <div class="flex items-center gap-4 px-4 py-2 text-[10px] text-text-faint tracking-widest uppercase whitespace-nowrap">
+        <a href="#experience" class="hover:text-cobalt transition-colors">Experience</a>
+        <span class="text-white/20">|</span>
+        <a href="#deployments" class="hover:text-cobalt transition-colors">Projects</a>
+        <span class="text-white/20">|</span>
+        <a href="#tech" class="hover:text-cobalt transition-colors">Tech</a>
+        <span class="text-white/20">|</span>
+        <a href="#logs" class="hover:text-cobalt transition-colors">Logs</a>
+        <span class="text-white/20">|</span>
+        <a href="#ambitions" class="hover:text-cobalt transition-colors">Ambitions</a>
+      </div>
+    </div>
+
+    <main class="pt-12 md:pt-12">
+      <slot />
+    </main>
+
+  </body>
+</html>

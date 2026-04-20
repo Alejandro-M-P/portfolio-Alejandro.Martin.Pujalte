@@ -1,0 +1,10 @@
+[
+  { "name": "GO", "version": "v1.23+", "usageLevel": 90 },
+  { "name": "TYPESCRIPT", "version": "v5.3+", "usageLevel": 80 },
+  { "name": "SHELL / BASH", "version": "bash 5+", "usageLevel": 85 },
+  { "name": "ASTRO", "version": "v5+", "usageLevel": 75 },
+  { "name": "REACT", "version": "v19+", "usageLevel": 70 },
+  { "name": "PODMAN / DOCKER", "version": "latest", "usageLevel": 80 },
+  { "name": "OLLAMA / LOCAL AI", "version": "latest", "usageLevel": 85 },
+  { "name": "GIT / MCP", "version": "v2.4+", "usageLevel": 95 }
+]

@@ -4,9 +4,9 @@ ollama:
 git:
   workdir: .
 secrets:
-  detection_mode: regex+ai
+  detection_mode: regex
 validation:
-  require_confirmation: true
+  require_confirmation: false
 mcp:
   name: git-courer
 preview:
