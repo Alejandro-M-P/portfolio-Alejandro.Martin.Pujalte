@@ -328,15 +328,19 @@ export default function LogsPanel({ logs, logLimit = 10 }: Props) {
       const fit = new FitAddon();
       term.loadAddon(fit);
       term.open(xtermContainer.current);
-      fit.fit();
       termRef.current = term;
       fitRef.current  = fit;
 
       BOOT.forEach(l => term.writeln(l));
       term.write(PROMPT);
-      term.focus();
 
-      const ro = new ResizeObserver(() => fit.fit());
+      // Wait for CRT boot animation (~600ms) before fitting, so the
+      // container has its real dimensions when xterm calculates columns/rows
+      setTimeout(() => {
+        if (!disposed) { fit.fit(); term.focus(); }
+      }, 650);
+
+      const ro = new ResizeObserver(() => { if (!disposed) fit.fit(); });
       ro.observe(xtermContainer.current!);
 
       term.onKey(({ key, domEvent: ev }) => {
@@ -473,7 +477,7 @@ export default function LogsPanel({ logs, logLimit = 10 }: Props) {
           <div
             ref={xtermContainer}
             className="flex-1 min-h-0 terminal-scanlines"
-            style={{ background: '#0d0d0d', padding: '8px' }}
+            style={{ background: '#0d0d0d' }}
           />
         )}
       </div>

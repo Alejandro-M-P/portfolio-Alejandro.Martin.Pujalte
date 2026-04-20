@@ -45,7 +45,7 @@ export default function ProjectGrid() {
   return (
     <>
       <div className="@container">
-        <div className="grid grid-cols-1 @xs:grid-cols-2 @md:grid-cols-3 gap-2">
+        <div className="grid grid-cols-1 @xs:grid-cols-2 @md:grid-cols-3 gap-1.5">
           {projects.map(p => (
             <ProjectCard key={p.id} project={p} onClick={setSelected} />
           ))}

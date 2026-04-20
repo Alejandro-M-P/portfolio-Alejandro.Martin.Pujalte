@@ -4,7 +4,33 @@ import { logActivity } from '../../lib/activityLog';
 
 const ADMIN_PASSWORD = import.meta.env.PUBLIC_ADMIN_PASSWORD;
 const GITHUB_TOKEN = import.meta.env.PUBLIC_GITHUB_TOKEN;
-const SESSION_KEY = 'admin_session';
+const SESSION_KEY   = 'admin_session';
+const SESSION_TS    = 'admin_session_ts';
+const ATTEMPTS_KEY  = 'admin_attempts';
+const LOCKOUT_KEY   = 'admin_lockout';
+const MAX_ATTEMPTS  = 3;
+const LOCKOUT_MS    = 5 * 60 * 1000; // 5 min
+const SESSION_TTL   = 30 * 60 * 1000; // 30 min
+
+async function sha256(text: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function isSessionValid(): boolean {
+  if (sessionStorage.getItem(SESSION_KEY) !== 'true') return false;
+  const ts = Number(sessionStorage.getItem(SESSION_TS) ?? 0);
+  if (Date.now() - ts > SESSION_TTL) {
+    sessionStorage.removeItem(SESSION_KEY);
+    sessionStorage.removeItem(SESSION_TS);
+    return false;
+  }
+  return true;
+}
+
+function touchSession() {
+  sessionStorage.setItem(SESSION_TS, String(Date.now()));
+}
 
 function ghHeaders(): HeadersInit {
   const h: Record<string, string> = { Accept: 'application/vnd.github+json' };
@@ -53,13 +79,66 @@ const input = "bg-carbono border border-white/20 px-4 py-3 text-[13px] text-whit
 /* ─── Password gate ─── */
 
 function PasswordGate({ onAuth }: { onAuth: () => void }) {
-  const [pw, setPw] = useState('');
-  const [err, setErr] = useState('');
-  const submit = (e: React.FormEvent) => {
+  const [pw, setPw]           = useState('');
+  const [err, setErr]         = useState('');
+  const [loading, setLoading] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+
+  // Check / update lockout countdown every second
+  useEffect(() => {
+    const tick = () => {
+      const lockUntil = Number(localStorage.getItem(LOCKOUT_KEY) ?? 0);
+      const remaining = Math.max(0, Math.ceil((lockUntil - Date.now()) / 1000));
+      setCountdown(remaining);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const locked = countdown > 0;
+
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (pw === ADMIN_PASSWORD) { sessionStorage.setItem(SESSION_KEY, 'true'); onAuth(); }
-    else { setErr('ACCESS_DENIED: Invalid credentials.'); setPw(''); }
-  };
+    if (locked || loading) return;
+
+    setLoading(true);
+    try {
+      const lockUntil = Number(localStorage.getItem(LOCKOUT_KEY) ?? 0);
+      if (Date.now() < lockUntil) return;
+
+      const hash    = await sha256(pw);
+      const pwHash  = await sha256(ADMIN_PASSWORD ?? '');
+      const correct = hash === pwHash;
+
+      if (correct) {
+        localStorage.removeItem(ATTEMPTS_KEY);
+        localStorage.removeItem(LOCKOUT_KEY);
+        sessionStorage.setItem(SESSION_KEY, 'true');
+        sessionStorage.setItem(SESSION_TS, String(Date.now()));
+        onAuth();
+      } else {
+        const attempts = Number(localStorage.getItem(ATTEMPTS_KEY) ?? 0) + 1;
+        localStorage.setItem(ATTEMPTS_KEY, String(attempts));
+        const remaining = MAX_ATTEMPTS - attempts;
+        if (attempts >= MAX_ATTEMPTS) {
+          const until = Date.now() + LOCKOUT_MS;
+          localStorage.setItem(LOCKOUT_KEY, String(until));
+          localStorage.setItem(ATTEMPTS_KEY, '0');
+          setErr(`LOCKOUT — too many attempts. Try again in 5 minutes.`);
+        } else {
+          setErr(`ACCESS_DENIED — ${remaining} attempt${remaining !== 1 ? 's' : ''} remaining.`);
+        }
+        setPw('');
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const mins = Math.floor(countdown / 60);
+  const secs = String(countdown % 60).padStart(2, '0');
+
   return (
     <div className="min-h-screen bg-carbono flex items-center justify-center px-6" style={{ backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px)', backgroundSize: '24px 24px' }}>
       <div className="border border-white/10 bg-carbono-surface p-8 w-full max-w-sm flex flex-col gap-5">
@@ -69,10 +148,31 @@ function PasswordGate({ onAuth }: { onAuth: () => void }) {
         </div>
         <form onSubmit={submit} className="flex flex-col gap-3">
           <Field label="Password" required>
-            <input type="password" value={pw} onChange={e => setPw(e.target.value)} className={input} placeholder="••••••••" autoFocus />
+            <input
+              type="password"
+              value={pw}
+              onChange={e => setPw(e.target.value)}
+              className={`${input} ${locked ? 'opacity-40 pointer-events-none' : ''}`}
+              placeholder="••••••••"
+              autoFocus
+              disabled={locked || loading}
+            />
           </Field>
-          {err && <p className="text-[12px] text-err tracking-widest">{err}</p>}
-          <button type="submit" className="bg-cobalt text-white text-xs font-bold tracking-widest uppercase px-6 py-3 hover:bg-cobalt-light transition-colors">AUTHENTICATE →</button>
+          {locked && (
+            <p className="text-[12px] text-err tracking-widest font-mono">
+              ⊘ LOCKED — {mins}:{secs} remaining
+            </p>
+          )}
+          {!locked && err && (
+            <p className="text-[12px] text-err tracking-widest">{err}</p>
+          )}
+          <button
+            type="submit"
+            disabled={locked || loading}
+            className="bg-cobalt text-white text-xs font-bold tracking-widest uppercase px-6 py-3 hover:bg-cobalt-light disabled:opacity-40 disabled:pointer-events-none transition-colors"
+          >
+            {loading ? 'VERIFYING...' : locked ? `LOCKED (${mins}:${secs})` : 'AUTHENTICATE →'}
+          </button>
         </form>
       </div>
     </div>
@@ -1200,7 +1300,26 @@ export default function AdminPanel() {
   const [authed, setAuthed] = useState(false);
   const [tab, setTab] = useState<AdminTab>('projects');
 
-  useEffect(() => { if (sessionStorage.getItem(SESSION_KEY) === 'true') setAuthed(true); }, []);
+  useEffect(() => {
+    if (isSessionValid()) { setAuthed(true); }
+  }, []);
+
+  // Touch session on any user activity; auto-logout on timeout
+  useEffect(() => {
+    if (!authed) return;
+    const onActivity = () => touchSession();
+    const events = ['mousedown', 'keydown', 'touchstart', 'scroll'];
+    events.forEach(e => window.addEventListener(e, onActivity, { passive: true }));
+
+    const checkExpiry = setInterval(() => {
+      if (!isSessionValid()) { setAuthed(false); }
+    }, 60_000);
+
+    return () => {
+      events.forEach(e => window.removeEventListener(e, onActivity));
+      clearInterval(checkExpiry);
+    };
+  }, [authed]);
 
   if (!authed) return <PasswordGate onAuth={() => setAuthed(true)} />;
 

@@ -65,7 +65,7 @@ export default function ProjectCard({ project, onClick }: ProjectCardProps) {
   const entropyStyle = isGold ? {} : getEntropyStyle(project.pushedAt, settings.dustThresholdDays);
 
   if (!visible) return (
-    <div ref={ref} className="h-[160px] border border-white/5 bg-carbono-surface animate-pulse" />
+    <div ref={ref} className="h-[150px] border border-white/5 bg-carbono-surface animate-pulse" />
   );
 
   return (
@@ -75,7 +75,7 @@ export default function ProjectCard({ project, onClick }: ProjectCardProps) {
         info overlaid at the bottom with a gradient.
       */}
       <div
-        className={`relative h-[160px] cursor-pointer group overflow-hidden border transition-all duration-150
+        className={`relative h-[150px] cursor-pointer group overflow-hidden border transition-all duration-150
           ${isGold
             ? 'border-bronze crt-flicker'
             : 'border-white/10 hover:border-white/40'
