@@ -3,7 +3,6 @@ import type { Project, TechTool, Ambition, Experience, SiteSettings, BuildEntry 
 import { logActivity } from '../../lib/activityLog';
 
 const ADMIN_PASSWORD = import.meta.env.PUBLIC_ADMIN_PASSWORD;
-const GITHUB_TOKEN = import.meta.env.PUBLIC_GITHUB_TOKEN;
 const SESSION_KEY   = 'admin_session';
 const SESSION_TS    = 'admin_session_ts';
 const ATTEMPTS_KEY  = 'admin_attempts';
@@ -33,9 +32,7 @@ function touchSession() {
 }
 
 function ghHeaders(): HeadersInit {
-  const h: Record<string, string> = { Accept: 'application/vnd.github+json' };
-  if (GITHUB_TOKEN) h['Authorization'] = `Bearer ${GITHUB_TOKEN}`;
-  return h;
+  return { Accept: 'application/vnd.github+json' };
 }
 
 /* ─── helpers ─── */
@@ -925,47 +922,30 @@ function SettingsTab() {
   const [cvStatus, setCvStatus] = useState<{ type: 'success' | 'error' | 'idle'; msg: string }>({ type: 'idle', msg: '' });
 
   async function uploadCv(file: File) {
-    const token = import.meta.env.PUBLIC_GITHUB_TOKEN;
-    const repo  = import.meta.env.PUBLIC_GITHUB_REPO;
-    if (!token || !repo) { setCvStatus({ type: 'error', msg: 'Falta PUBLIC_GITHUB_TOKEN o PUBLIC_GITHUB_REPO' }); return; }
+    const repo = import.meta.env.PUBLIC_GITHUB_REPO;
+    if (!repo) { setCvStatus({ type: 'error', msg: 'Falta PUBLIC_GITHUB_REPO en .env' }); return; }
 
     setCvUploading(true);
     setCvStatus({ type: 'idle', msg: 'Leyendo archivo...' });
 
     try {
-      // Read file as base64
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = () => {
-          const result = reader.result as string;
-          resolve(result.split(',')[1]); // strip data:...;base64, prefix
-        };
+        reader.onload = () => resolve((reader.result as string).split(',')[1]);
         reader.onerror = reject;
         reader.readAsDataURL(file);
       });
 
-      const headers = { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' };
-      const filePath = 'public/cv.pdf';
-      const apiUrl   = `https://api.github.com/repos/${repo}/contents/${filePath}`;
+      setCvStatus({ type: 'idle', msg: 'Subiendo CV...' });
+      const res = await fetch('/api/github', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'uploadCv', base64, repo }),
+      });
 
-      // Get existing SHA (needed to overwrite)
-      setCvStatus({ type: 'idle', msg: 'Verificando archivo existente...' });
-      let existingSha: string | undefined;
-      const existRes = await fetch(apiUrl, { headers });
-      if (existRes.ok) { const d = await existRes.json(); existingSha = d.sha; }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? `Upload failed ${res.status}`);
 
-      // Upload (create or replace)
-      setCvStatus({ type: 'idle', msg: existingSha ? 'Reemplazando CV...' : 'Subiendo CV...' });
-      const body: Record<string, string> = {
-        message: existingSha ? 'cv: replace resume' : 'cv: add resume',
-        content: base64,
-      };
-      if (existingSha) body.sha = existingSha;
-
-      const upRes = await fetch(apiUrl, { method: 'PUT', headers, body: JSON.stringify(body) });
-      if (!upRes.ok) { const err = await upRes.json(); throw new Error(err.message ?? `Upload failed ${upRes.status}`); }
-
-      // Auto-set cvUrl to /cv.pdf and save
       update({ cvUrl: '/cv.pdf' });
       setCvStatus({ type: 'success', msg: '✓ CV subido — disponible en /cv.pdf (Vercel redeploya en ~30s)' });
     } catch (e: unknown) {
@@ -1138,17 +1118,14 @@ function PublishTab() {
   }
 
   async function publish() {
-    const token = import.meta.env.PUBLIC_GITHUB_TOKEN;
-    if (!token) { setStatus({ type: 'error', msg: 'Falta PUBLIC_GITHUB_TOKEN en .env' }); return; }
     if (!repo.includes('/')) { setStatus({ type: 'error', msg: 'Repo inválido — formato: owner/repo' }); return; }
 
     setPublishing(true);
     setStatus({ type: 'idle', msg: '' });
     const buildNum = nextBuildNumber();
-    const authHeaders = { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' };
 
     try {
-      const files = [
+      const fileDefs = [
         { key: 'portfolioProjects',   path: 'public/data/projects.json',   label: 'projects' },
         { key: 'portfolioTechstack',  path: 'public/data/techstack.json',  label: 'techstack' },
         { key: 'portfolioAmbitions',  path: 'public/data/ambitions.json',  label: 'ambitions' },
@@ -1156,63 +1133,20 @@ function PublishTab() {
         { key: 'portfolioSettings',   path: 'public/data/settings.json',   label: 'settings' },
       ];
 
-      const toCommit = files.filter(f => !!localStorage.getItem(f.key));
+      const toCommit = fileDefs.filter(f => !!localStorage.getItem(f.key));
       if (toCommit.length === 0) throw new Error('No hay datos para publicar');
 
-      // 1. Get latest commit SHA
-      const refRes = await fetch(`https://api.github.com/repos/${repo}/git/ref/heads/${branch}`, { headers: authHeaders });
-      if (!refRes.ok) throw new Error(`Branch '${branch}' not found — ${refRes.status}`);
-      const ref = await refRes.json();
-      const latestSha: string = ref.object.sha;
+      const files = toCommit.map(f => ({ path: f.path, content: localStorage.getItem(f.key)! }));
 
-      // 2. Get tree SHA
-      const commitRes = await fetch(`https://api.github.com/repos/${repo}/git/commits/${latestSha}`, { headers: authHeaders });
-      if (!commitRes.ok) throw new Error(`Commit not found — ${commitRes.status}`);
-      const commitData = await commitRes.json();
-      const baseTree: string = commitData.tree.sha;
-
-      // 3. Create blobs
-      setStatus({ type: 'idle', msg: 'Creating blobs...' });
-      const treeItems = await Promise.all(toCommit.map(async (f) => {
-        const content = localStorage.getItem(f.key)!;
-        const blobRes = await fetch(`https://api.github.com/repos/${repo}/git/blobs`, {
-          method: 'POST', headers: authHeaders,
-          body: JSON.stringify({ content: btoa(unescape(encodeURIComponent(content))), encoding: 'base64' }),
-        });
-        if (!blobRes.ok) throw new Error(`Blob failed for ${f.label}`);
-        const blob = await blobRes.json();
-        return { path: f.path, mode: '100644', type: 'blob', sha: blob.sha };
-      }));
-
-      // 4. Create tree
-      setStatus({ type: 'idle', msg: 'Creating tree...' });
-      const treeRes = await fetch(`https://api.github.com/repos/${repo}/git/trees`, {
-        method: 'POST', headers: authHeaders,
-        body: JSON.stringify({ base_tree: baseTree, tree: treeItems }),
+      setStatus({ type: 'idle', msg: 'Publishing...' });
+      const res = await fetch('/api/github', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'publish', repo, branch, files, buildNum }),
       });
-      if (!treeRes.ok) throw new Error(`Tree creation failed — ${treeRes.status}`);
-      const tree = await treeRes.json();
 
-      // 5. Create commit
-      setStatus({ type: 'idle', msg: 'Creating commit...' });
-      const newCommitRes = await fetch(`https://api.github.com/repos/${repo}/git/commits`, {
-        method: 'POST', headers: authHeaders,
-        body: JSON.stringify({
-          message: `data: update portfolio content [build #${buildNum}]`,
-          tree: tree.sha,
-          parents: [latestSha],
-        }),
-      });
-      if (!newCommitRes.ok) throw new Error(`Commit creation failed — ${newCommitRes.status}`);
-      const newCommit = await newCommitRes.json();
-
-      // 6. Update branch ref
-      setStatus({ type: 'idle', msg: 'Updating branch...' });
-      const updateRes = await fetch(`https://api.github.com/repos/${repo}/git/refs/heads/${branch}`, {
-        method: 'PATCH', headers: authHeaders,
-        body: JSON.stringify({ sha: newCommit.sha }),
-      });
-      if (!updateRes.ok) throw new Error(`Ref update failed — ${updateRes.status}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? `Publish failed ${res.status}`);
 
       const entry: BuildEntry = {
         buildNumber: buildNum,

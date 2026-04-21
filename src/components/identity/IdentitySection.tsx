@@ -10,41 +10,18 @@ interface IdentityProps {
   quote: string;
   status: 'ONLINE' | 'OFFLINE' | 'BUSY';
   availabilityValue?: number;
+  cvUrl?: string;
+  linkedinUrl?: string;
   links?: { label: string; href: string }[];
 }
 
-export default function IdentitySection({ name, handle, bio, quote, status: statusProp, availabilityValue = 99.9, links = [] }: IdentityProps) {
-  const [imgError, setImgError]         = React.useState(false);
-  const [liveAvailability, setLiveAvailability] = React.useState(availabilityValue);
-  const [liveStatus, setLiveStatus]     = React.useState(statusProp);
-  const [cvUrl, setCvUrl]               = React.useState<string | undefined>(undefined);
-  const [linkedinUrl, setLinkedinUrl]   = React.useState<string | undefined>(undefined);
-
-  React.useEffect(() => {
-    function applySettings() {
-      try {
-        const s = localStorage.getItem('portfolioSettings');
-        if (!s) return;
-        const parsed = JSON.parse(s);
-        if (parsed.availabilityValue !== undefined) setLiveAvailability(parsed.availabilityValue);
-        if (parsed.status) setLiveStatus(parsed.status);
-        setCvUrl(parsed.cvUrl || undefined);
-        setLinkedinUrl(parsed.linkedinUrl || undefined);
-      } catch {}
-    }
-    applySettings();
-    window.addEventListener('storage', applySettings);
-    window.addEventListener('portfolioSettingsChanged', applySettings);
-    return () => {
-      window.removeEventListener('storage', applySettings);
-      window.removeEventListener('portfolioSettingsChanged', applySettings);
-    };
-  }, []);
+export default function IdentitySection({ name, handle, bio, quote, status, availabilityValue = 99.9, cvUrl, linkedinUrl, links = [] }: IdentityProps) {
+  const [imgError, setImgError] = React.useState(false);
 
   return (
     <section className="border border-white/10 bg-carbono-surface flex flex-col relative z-10">
 
-      <div className="relative w-full overflow-hidden bg-carbono-mid" style={{ aspectRatio: '4/3' }}>
+      <div className="relative w-full overflow-hidden bg-carbono-mid" style={{ aspectRatio: '4/3', maxHeight: 'clamp(140px, 22vh, 220px)' }}>
         {!imgError ? (
           <img
             src="/profile.jpg"
@@ -57,7 +34,7 @@ export default function IdentitySection({ name, handle, bio, quote, status: stat
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-carbono-surface via-transparent to-transparent" />
         <div className="absolute top-3 left-3">
-          <Pill variant="cobalt" className="text-[10px]">{liveStatus}</Pill>
+          <Pill variant="cobalt" className="text-[10px]">{status}</Pill>
         </div>
       </div>
 
@@ -71,7 +48,7 @@ export default function IdentitySection({ name, handle, bio, quote, status: stat
 
         <blockquote className="text-xs text-text-faint border-l-2 border-cobalt pl-3 leading-relaxed">{quote}</blockquote>
 
-        <AvailabilityBar value={liveAvailability} />
+        <AvailabilityBar value={availabilityValue} />
 
         <div className="flex flex-col gap-2">
           <ContactButton />

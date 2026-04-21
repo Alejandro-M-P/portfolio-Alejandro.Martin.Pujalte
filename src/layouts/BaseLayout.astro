@@ -7,8 +7,8 @@ interface Props {
 }
 
 const {
-  title = 'ALEJANDRO.MARTIN.PUJALTE — Systems Architect',
-  description = 'Senior Systems Architect and Full-Stack Engineer specializing in high-availability infrastructure, local AI tooling, and structurally honest architectures.',
+  title = 'ALEJANDRO.MARTIN.PUJALTE — Systems Engineer',
+  description = 'Systems Engineer and Full-Stack Developer building high-availability infrastructure, local AI tooling, and structurally honest architectures.',
 } = Astro.props;
 
 const ogImage = '/profile.jpg';
@@ -45,8 +45,6 @@ const siteUrl = Astro.site ?? 'https://alejandro-mp.dev';
 
         <!-- Desktop links -->
         <div class="hidden md:flex items-center gap-5 text-xs text-text-muted tracking-widest uppercase">
-          <a href="#experience" class="hover:text-cobalt transition-colors duration-100">Experience</a>
-          <span class="text-white/20">|</span>
           <a href="#deployments" class="hover:text-cobalt transition-colors duration-100">Projects</a>
           <span class="text-white/20">|</span>
           <a href="#tech" class="hover:text-cobalt transition-colors duration-100">Tech</a>
@@ -83,7 +81,6 @@ const siteUrl = Astro.site ?? 'https://alejandro-mp.dev';
       class="fixed top-12 left-0 right-0 z-40 md:hidden border-b border-white/10 bg-carbono/95 backdrop-blur-md hidden"
     >
       <div class="flex flex-col px-6 py-4 gap-4">
-        <a href="#experience" class="mobile-link text-sm text-text-muted tracking-widest uppercase hover:text-cobalt transition-colors">Experience</a>
         <a href="#deployments" class="mobile-link text-sm text-text-muted tracking-widest uppercase hover:text-cobalt transition-colors">Projects</a>
         <a href="#tech" class="mobile-link text-sm text-text-muted tracking-widest uppercase hover:text-cobalt transition-colors">Tech</a>
         <a href="#ambitions" class="mobile-link text-sm text-text-muted tracking-widest uppercase hover:text-cobalt transition-colors">Ambitions</a>

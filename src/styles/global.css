@@ -66,7 +66,7 @@ body {
 }
 
 /* README markdown renderer */
-.readme-content { font-size: 0.75rem; line-height: 1.7; color: #c8cad8; }
+.readme-content { font-size: 0.85rem; line-height: 1.7; color: #c8cad8; }
 .readme-content h1 { font-size: 1.1rem; font-weight: 700; color: #f0eeec; margin: 1rem 0 0.5rem; letter-spacing: -0.01em; }
 .readme-content h2 { font-size: 0.9rem; font-weight: 700; color: #f0eeec; margin: 1rem 0 0.4rem; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.25rem; }
 .readme-content h3 { font-size: 0.8rem; font-weight: 600; color: #e0dedc; margin: 0.75rem 0 0.3rem; }

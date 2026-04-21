@@ -158,7 +158,7 @@ export default function ProjectCard({ project, onClick }: ProjectCardProps) {
               </span>
             ))}
             {project.stack.length > 3 && (
-              <span className="text-[8px] text-white/40 py-0.5">+{project.stack.length - 3}</span>
+              <span className="text-[8px] text-white/60 py-0.5">+{project.stack.length - 3}</span>
             )}
           </div>
         </div>

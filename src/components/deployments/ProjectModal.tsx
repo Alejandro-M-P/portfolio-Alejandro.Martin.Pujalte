@@ -10,10 +10,7 @@ interface ProjectModalProps {
 marked.use({ gfm: true, breaks: true });
 
 function ghHeaders(): Record<string, string> {
-  const token = import.meta.env.PUBLIC_GITHUB_TOKEN;
-  const h: Record<string, string> = { Accept: 'application/vnd.github+json' };
-  if (token) h['Authorization'] = `Bearer ${token}`;
-  return h;
+  return { Accept: 'application/vnd.github+json' };
 }
 
 function decodeBase64(content: string): string {

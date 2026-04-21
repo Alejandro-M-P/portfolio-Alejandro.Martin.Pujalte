@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { Project, TechTool } from '../../types';
 import ProgressBar from '../ui/ProgressBar';
+import AllTechModal from './AllTechModal';
 
 const VERSION_MAP: Record<string, string> = {
   'GO': 'v1.23+',
@@ -63,6 +64,7 @@ function deriveFromProjects(projects: Project[]): TechTool[] {
 
 export default function TechMatrix() {
   const [tools, setTools] = useState<TechTool[]>([]);
+  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     const loadTechStack = () => {
@@ -111,28 +113,45 @@ export default function TechMatrix() {
     );
   }
 
+  const visible = tools.slice(0, 6);
+
   return (
-    <div className="border border-white/10 bg-carbono-surface overflow-x-auto">
-      <table className="w-full text-xs font-mono">
-        <thead>
-          <tr className="border-b border-white/10 bg-carbono">
-            <th className="text-left px-4 py-2.5 text-text-faint tracking-widest uppercase font-normal text-[12px]">Language / Tool</th>
-            <th className="text-left px-4 py-2.5 text-text-faint tracking-widest uppercase font-normal text-[12px]">Preferred Version</th>
-            <th className="text-left px-4 py-2.5 text-text-faint tracking-widest uppercase font-normal text-[12px]">Usage Level</th>
-          </tr>
-        </thead>
-        <tbody>
-          {tools.map((tool, i) => (
-            <tr key={tool.name} className={`border-b border-white/5 last:border-b-0 hover:bg-white/[0.03] transition-colors ${i % 2 !== 0 ? 'bg-white/[0.015]' : ''}`}>
-              <td className="px-4 py-2.5 text-white tracking-widest uppercase text-[12px]">{tool.name}</td>
-              <td className="px-4 py-2.5 text-text-muted tracking-widest text-[12px]">{tool.version}</td>
-              <td className="px-4 py-2.5">
-                <ProgressBar value={tool.usageLevel} segments={10} />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <>
+      <div className="flex flex-col gap-3">
+        <div className="border border-white/10 bg-carbono-surface overflow-x-auto">
+          <table className="w-full text-xs font-mono">
+            <thead>
+              <tr className="border-b border-white/10 bg-carbono">
+                <th className="text-left px-4 py-2.5 text-text-faint tracking-widest uppercase font-normal text-[12px]">Language / Tool</th>
+                <th className="text-left px-4 py-2.5 text-text-faint tracking-widest uppercase font-normal text-[12px]">Preferred Version</th>
+                <th className="text-left px-4 py-2.5 text-text-faint tracking-widest uppercase font-normal text-[12px]">Usage Level</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((tool, i) => (
+                <tr key={tool.name} className={`border-b border-white/5 last:border-b-0 hover:bg-white/[0.03] transition-colors ${i % 2 !== 0 ? 'bg-white/[0.015]' : ''}`}>
+                  <td className="px-4 py-2.5 text-white tracking-widest uppercase text-[12px]">{tool.name}</td>
+                  <td className="px-4 py-2.5 text-text-muted tracking-widest text-[12px]">{tool.version}</td>
+                  <td className="px-4 py-2.5">
+                    <ProgressBar value={tool.usageLevel} segments={10} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {tools.length > 6 && (
+          <button
+            onClick={() => setShowAll(true)}
+            className="self-end text-[11px] text-text-faint hover:text-cobalt tracking-widest uppercase border border-white/10 hover:border-cobalt/40 px-4 py-1.5 transition-colors duration-100"
+          >
+            FULL_MATRIX ({tools.length}) →
+          </button>
+        )}
+      </div>
+
+      {showAll && <AllTechModal tools={tools} onClose={() => setShowAll(false)} />}
+    </>
   );
 }

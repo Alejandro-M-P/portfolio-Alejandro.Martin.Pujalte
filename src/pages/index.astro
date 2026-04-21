@@ -1,87 +1,78 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import IdentitySection from '../components/identity/IdentitySection';
-import ExperienceSection from '../components/experience/ExperienceSection';
 import ProjectGrid from '../components/deployments/ProjectGrid';
 import TechMatrix from '../components/techstack/TechMatrix';
 import LogsPanel from '../components/systemlogs/LogsPanel';
 import Roadmap from '../components/ambitions/Roadmap';
 import { logs, ambitions, techStack, identity } from '../data/portfolio';
+import settings from '../../public/data/settings.json';
 ---
 
 <BaseLayout>
-  <!--
-    Mobile:  flex-col natural, page scrolls, sections flow freely
-    Desktop: two-column grid, NO page scroll, each section panel has its own scroll
-  -->
-  <div class="w-full px-4 sm:px-6 lg:px-8 py-4 lg:py-0 lg:h-[calc(100vh-3rem)] lg:overflow-hidden">
-    <div class="flex flex-col lg:grid lg:grid-cols-[360px_1fr] lg:h-full gap-6 lg:gap-6">
+  <div class="w-full px-4 sm:px-6 lg:px-8 py-4 lg:py-6">
+    <div class="flex flex-col lg:grid lg:grid-cols-[300px_1fr] gap-4 lg:gap-6 lg:items-start">
 
-      <!-- ── LEFT column ─────────────────────────────────────── -->
-      <div class="flex flex-col gap-4 lg:h-full lg:overflow-hidden lg:py-4">
+      <!-- ── LEFT: sticky identity panel ─────────────────── -->
+      <div class="flex flex-col gap-3
+                  lg:sticky lg:top-[60px]
+                  lg:max-h-[calc(100vh-68px)]
+                  lg:overflow-hidden">
 
-        <div class="lg:flex-shrink-0">
-          <IdentitySection {...identity} client:load />
-        </div>
+        <IdentitySection
+          {...identity}
+          status={settings.status ?? identity.status}
+          availabilityValue={settings.availabilityValue ?? identity.availabilityValue}
+          cvUrl={settings.cvUrl}
+          linkedinUrl={settings.linkedinUrl}
+          client:load
+        />
 
-        <!-- System Logs: desktop only, fills remaining height -->
-        <div class="hidden lg:flex lg:flex-col lg:flex-1 lg:min-h-0" id="logs">
+        <!-- System Logs: desktop only, fills remaining sticky space -->
+        <div class="hidden lg:flex lg:flex-col lg:flex-1 lg:min-h-0">
           <div class="mb-2 pb-2 border-b border-white/[0.08] flex-shrink-0">
             <h2 class="text-[0.85rem] font-bold text-[#f0eeec] uppercase tracking-[0.04em] font-mono">System Logs</h2>
           </div>
-          <div class="flex-1 min-h-0">
+          <div class="flex-1 min-h-0 overflow-y-auto">
             <LogsPanel logs={logs} client:load />
           </div>
         </div>
 
       </div>
 
-      <!-- ── RIGHT column: flex-col, each section is a scrollable panel ─── -->
-      <!--
-        Desktop: sections are flex children with min-h-0, content scrolls inside.
-        flex-[N] controls relative height weight.
-        Mobile: sections flow naturally, page scrolls.
-      -->
-      <div class="flex flex-col gap-4 lg:h-full lg:py-4 lg:pr-1">
+      <!-- ── RIGHT: natural flow content ─────────────────── -->
+      <div class="flex flex-col gap-6">
 
-        <!-- Experience — flex-[2] -->
-        <section id="experience" class="flex flex-col lg:flex-[2] lg:min-h-0">
-          <div class="mb-2 pb-2 border-b border-white/[0.08] flex-shrink-0">
-            <h2 class="text-[0.85rem] font-bold text-[#f0eeec] uppercase tracking-[0.04em] font-mono">Experience</h2>
-          </div>
-          <div class="lg:flex-1 lg:overflow-y-auto lg:min-h-0">
-            <ExperienceSection client:load />
-          </div>
-        </section>
-
-        <!-- Projects — flex-[3] -->
-        <section id="deployments" class="flex flex-col lg:flex-[3] lg:min-h-0">
-          <div class="mb-2 pb-2 border-b border-white/[0.08] flex-shrink-0">
+        <!-- Projects -->
+        <section id="deployments">
+          <div class="mb-3 pb-2 border-b border-white/[0.08]">
             <h2 class="text-[0.85rem] font-bold text-[#f0eeec] uppercase tracking-[0.04em] font-mono">Projects</h2>
           </div>
-          <div class="lg:flex-1 lg:overflow-y-auto lg:min-h-0">
-            <ProjectGrid client:visible />
-          </div>
+          <ProjectGrid client:visible />
         </section>
 
-        <!-- Tech — flex-[2] -->
-        <section id="tech" class="flex flex-col lg:flex-[2] lg:min-h-0">
-          <div class="mb-2 pb-2 border-b border-white/[0.08] flex-shrink-0">
+        <!-- Technologies -->
+        <section id="tech">
+          <div class="mb-3 pb-2 border-b border-white/[0.08]">
             <h2 class="text-[0.85rem] font-bold text-[#f0eeec] uppercase tracking-[0.04em] font-mono">Technologies & Tools</h2>
           </div>
-          <div class="lg:flex-1 lg:overflow-y-auto lg:min-h-0">
-            <TechMatrix tools={techStack} client:load />
-          </div>
+          <TechMatrix tools={techStack} client:load />
         </section>
 
-        <!-- Ambitions: desktop only, flex-[0.5] → mínimo -->
-        <section id="ambitions" class="hidden lg:flex lg:flex-col lg:flex-[1] lg:min-h-0 lg:max-h-[120px] pb-2">
-          <div class="mb-2 pb-2 border-b border-white/[0.08] flex-shrink-0">
+        <!-- Ambitions -->
+        <section id="ambitions">
+          <div class="mb-3 pb-2 border-b border-white/[0.08]">
             <h2 class="text-[0.85rem] font-bold text-[#f0eeec] uppercase tracking-[0.04em] font-mono">Ambitions</h2>
           </div>
-          <div class="lg:flex-1 lg:overflow-y-auto lg:min-h-0">
-            <Roadmap ambitions={ambitions} client:idle />
+          <Roadmap ambitions={ambitions} client:idle />
+        </section>
+
+        <!-- System Logs: mobile only -->
+        <section class="lg:hidden">
+          <div class="mb-3 pb-2 border-b border-white/[0.08]">
+            <h2 class="text-[0.85rem] font-bold text-[#f0eeec] uppercase tracking-[0.04em] font-mono">System Logs</h2>
           </div>
+          <LogsPanel logs={logs} client:idle />
         </section>
 
       </div>
