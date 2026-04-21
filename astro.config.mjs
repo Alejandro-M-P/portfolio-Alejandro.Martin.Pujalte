@@ -6,7 +6,6 @@ import tailwindcss from '@tailwindcss/vite';
 import vercel from '@astrojs/vercel';
 
 export default defineConfig({
-  output: 'hybrid',
   adapter: vercel(),
   site: 'https://alejandro-mp.dev',
   integrations: [
