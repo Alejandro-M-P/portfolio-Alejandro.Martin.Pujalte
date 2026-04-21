@@ -3,152 +3,115 @@ import type { Project, TechTool } from '../../types';
 import ProgressBar from '../ui/ProgressBar';
 import AllTechModal from './AllTechModal';
 
+interface TechMatrixProps {
+  tools?: TechTool[];
+}
+
 const VERSION_MAP: Record<string, string> = {
   'GO': 'v1.23+',
   'TYPESCRIPT': 'v5.3+',
   'JAVASCRIPT': 'ES2024',
   'SHELL': 'bash 5+',
-  'SHELL / BASH': 'bash 5+',
-  'BASH': 'bash 5+',
   'ASTRO': 'v5+',
   'REACT': 'v19+',
-  'REACT NATIVE': 'v0.74+',
-  'VUE': 'v3+',
-  'SVELTE': 'v5+',
-  'NEXT.JS': 'v14+',
-  'NODE': 'v22+',
-  'NODE.JS': 'v22+',
-  'PYTHON': 'v3.12+',
-  'RUST': 'v1.78+',
   'DOCKER': 'v26+',
   'PODMAN': 'v5+',
-  'PODMAN / DOCKER': 'v5+',
-  'KUBERNETES': 'v1.30+',
-  'K8S': 'v1.30+',
-  'DISTROBOX': 'v1.7+',
   'OLLAMA': 'latest',
-  'OLLAMA / LOCAL AI': 'latest',
-  'AI': 'latest',
   'MCP': 'v1.0+',
   'GIT': 'v2.45+',
-  'GIT / MCP': 'v2.45+',
   'TAILWIND': 'v4+',
-  'CSS': 'CSS3',
-  'FIGMA': 'latest',
   'POSTGRESQL': 'v16+',
-  'MYSQL': 'v8+',
-  'SQLITE': 'v3+',
-  'REDIS': 'v7+',
-  'MONGODB': 'v7+',
+  'NODE.JS': 'v22+',
 };
 
 function deriveFromProjects(projects: Project[]): TechTool[] {
   if (!projects.length) return [];
-
   const counts: Record<string, number> = {};
+  const dustThresholdDays = 60;
+
   for (const p of projects) {
+    const stars = Number(p.specs?.stars ?? 0);
+    const isGold = !!(p.isHighlighted || p.isFavorite || stars >= 5);
+    const daysSinceUpdate = p.pushedAt ? (Date.now() - new Date(p.pushedAt).getTime()) / 86_400_000 : 0;
+    const isDusty = daysSinceUpdate > dustThresholdDays;
+
+    // Sistema de pesos industrial
+    let weight = 1.0;
+    if (isGold) weight = 2.0;
+    if (isDusty) weight = 0.5;
+
     for (const tech of p.stack) {
-      counts[tech] = (counts[tech] ?? 0) + 1;
+      counts[tech] = (counts[tech] ?? 0) + weight;
     }
   }
 
-  const total = projects.length;
+  // Normalizar a porcentaje basado en el máximo puntaje
+  const scores = Object.values(counts);
+  const maxScore = Math.max(...scores, 1);
+
   return Object.entries(counts)
     .sort(([, a], [, b]) => b - a)
-    .map(([name, count]) => ({
+    .map(([name, score]) => ({
       name,
       version: VERSION_MAP[name] ?? '-',
-      usageLevel: Math.round((count / total) * 100),
+      usageLevel: Math.round((score / maxScore) * 100),
     }));
 }
 
-export default function TechMatrix() {
-  const [tools, setTools] = useState<TechTool[]>([]);
+export default function TechMatrix({ tools: initialTools = [] }: TechMatrixProps) {
+  const [tools, setTools] = useState<TechTool[]>(initialTools);
   const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     const loadTechStack = () => {
-      // Admin overrides take precedence
-      const adminStored = localStorage.getItem('portfolioTechstack');
-      if (adminStored) {
-        const adminTools: TechTool[] = JSON.parse(adminStored);
-        if (adminTools?.length) { setTools(adminTools); return; }
-      }
-      // Derive from projects as fallback
       const projectStored = localStorage.getItem('portfolioProjects');
       if (projectStored) {
         const projects: Project[] = JSON.parse(projectStored);
-        if (projects?.length) { setTools(deriveFromProjects(projects)); return; }
+        if (projects?.length) { 
+          // Tomamos solo los primeros 10 para que sea "RECENT"
+          setTools(deriveFromProjects(projects.slice(0, 10))); 
+          return; 
+        }
       }
-      fetch('/data/projects.json')
-        .then(r => r.ok ? r.json() : null)
-        .then((projects: Project[] | null) => {
-          if (projects?.length) setTools(deriveFromProjects(projects));
-        })
-        .catch(() => {});
+      setTools(initialTools);
     };
 
     loadTechStack();
-
     const handleStorageChange = (e: StorageEvent) => {
-      if (['portfolioProjects', 'portfolioTechstack', 'lastDataUpdate'].includes(e.key ?? '')) {
-        loadTechStack();
-      }
+      if (['portfolioProjects', 'portfolioTechstack', 'lastDataUpdate'].includes(e.key ?? '')) loadTechStack();
     };
-    const handleCustom = () => loadTechStack();
-
     window.addEventListener('storage', handleStorageChange);
-    window.addEventListener('portfolioTechstackChanged', handleCustom);
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('portfolioTechstackChanged', handleCustom);
-    };
-  }, []);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [initialTools]);
 
   if (!tools.length) {
     return (
-      <div className="border border-white/10 bg-carbono-surface p-8 text-center">
-        <span className="text-[12px] text-text-faint tracking-widest">NO_TOOLS_REGISTERED</span>
+      <div className="border border-white/10 bg-carbono-surface p-8 text-center island-fade">
+        <span className="text-[14px] text-text-faint tracking-widest">NO_TOOLS_REGISTERED</span>
       </div>
     );
   }
 
-  const visible = tools.slice(0, 6);
-
   return (
     <>
-      <div className="flex flex-col gap-3">
-        <div className="border border-white/10 bg-carbono-surface overflow-x-auto">
-          <table className="w-full text-xs font-mono">
-            <thead>
-              <tr className="border-b border-white/10 bg-carbono">
-                <th className="text-left px-4 py-2.5 text-text-faint tracking-widest uppercase font-normal text-[12px]">Language / Tool</th>
-                <th className="text-left px-4 py-2.5 text-text-faint tracking-widest uppercase font-normal text-[12px]">Preferred Version</th>
-                <th className="text-left px-4 py-2.5 text-text-faint tracking-widest uppercase font-normal text-[12px]">Usage Level</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map((tool, i) => (
-                <tr key={tool.name} className={`border-b border-white/5 last:border-b-0 hover:bg-white/[0.03] transition-colors ${i % 2 !== 0 ? 'bg-white/[0.015]' : ''}`}>
-                  <td className="px-4 py-2.5 text-white tracking-widest uppercase text-[12px]">{tool.name}</td>
-                  <td className="px-4 py-2.5 text-text-muted tracking-widest text-[12px]">{tool.version}</td>
-                  <td className="px-4 py-2.5">
-                    <ProgressBar value={tool.usageLevel} segments={10} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <div className="flex flex-col gap-4 island-load h-full">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {tools.map((tool) => (
+            <div key={tool.name} className="border border-white/10 bg-carbono p-3 flex flex-col gap-2 hover:border-cobalt/40 transition-colors">
+              <div className="flex justify-between items-center">
+                <span className="text-[13px] font-bold text-white tracking-widest uppercase">{tool.name}</span>
+                <span className="text-[10px] text-cobalt tracking-widest font-mono">[ {tool.usageLevel}% ]</span>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <ProgressBar value={tool.usageLevel} segments={12} />
+                <div className="flex justify-between items-center">
+                  <span className="text-[9px] text-text-faint tracking-widest italic">{tool.version !== '-' ? tool.version : 'CORE_MODULE'}</span>
+                  <span className="text-[9px] text-white/20 tracking-widest uppercase">system_verified</span>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
-
-        {tools.length > 6 && (
-          <button
-            onClick={() => setShowAll(true)}
-            className="self-end text-[11px] text-text-faint hover:text-cobalt tracking-widest uppercase border border-white/10 hover:border-cobalt/40 px-4 py-1.5 transition-colors duration-100"
-          >
-            FULL_MATRIX ({tools.length}) →
-          </button>
-        )}
       </div>
 
       {showAll && <AllTechModal tools={tools} onClose={() => setShowAll(false)} />}

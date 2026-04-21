@@ -15,11 +15,11 @@ interface IdentityProps {
   links?: { label: string; href: string }[];
 }
 
-export default function IdentitySection({ name, handle, bio, quote, status, availabilityValue = 99.9, cvUrl, linkedinUrl, links = [] }: IdentityProps) {
+export default function IdentitySection({ name, handle, bio, quote, status, availabilityValue, cvUrl, linkedinUrl, links = [] }: IdentityProps) {
   const [imgError, setImgError] = React.useState(false);
 
   return (
-    <section className="border border-white/10 bg-carbono-surface flex flex-col relative z-10">
+    <section className="industrial-panel flex flex-col relative z-10 island-load overflow-hidden">
 
       <div className="relative w-full overflow-hidden bg-carbono-mid" style={{ aspectRatio: '4/3', maxHeight: 'clamp(140px, 22vh, 220px)' }}>
         {!imgError ? (
@@ -30,23 +30,21 @@ export default function IdentitySection({ name, handle, bio, quote, status, avai
             onError={() => setImgError(true)}
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-xs text-text-faint tracking-widest">NO_SIGNAL</div>
+          <div className="w-full h-full flex items-center justify-center text-[13px] text-text-faint tracking-widest">NO_SIGNAL</div>
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-carbono-surface via-transparent to-transparent" />
         <div className="absolute top-3 left-3">
-          <Pill variant="cobalt" className="text-[10px]">{status}</Pill>
+          <Pill variant="cobalt" className="text-[12px]">{status}</Pill>
         </div>
       </div>
 
       <div className="p-5 flex flex-col gap-4">
         <div className="flex flex-col gap-0.5">
-          <h1 className="text-base font-bold tracking-tight text-white leading-snug whitespace-pre-line">{name}</h1>
-          <span className="text-[10px] text-text-faint tracking-widest">{handle}</span>
+          <h1 className="text-xl font-bold tracking-tight text-white leading-snug whitespace-pre-line">{name}</h1>
+          <span className="text-[13px] text-text-faint tracking-widest">{handle}</span>
         </div>
 
-        <p className="text-xs text-text-muted leading-relaxed">{bio}</p>
-
-        <blockquote className="text-xs text-text-faint border-l-2 border-cobalt pl-3 leading-relaxed">{quote}</blockquote>
+        <p className="text-sm text-text-muted leading-relaxed">{bio}</p>
 
         <AvailabilityBar value={availabilityValue} />
 
@@ -58,6 +56,7 @@ export default function IdentitySection({ name, handle, bio, quote, status, avai
               href={cvUrl}
               target="_blank"
               rel="noopener noreferrer"
+              download
               className="block w-full border border-cobalt/40 text-cobalt text-center text-xs font-bold tracking-widest uppercase px-4 py-2.5 hover:bg-cobalt hover:text-white transition-colors duration-100"
             >
               ↓ VIEW CV

@@ -2,18 +2,18 @@
 @import "tailwindcss";
 
 @theme {
-  --color-carbono: #1a1a1a;
-  --color-carbono-low: #161616;
-  --color-carbono-surface: #222222;
-  --color-carbono-mid: #2a2a2a;
-  --color-carbono-high: #333333;
-  --color-carbono-highest: #404040;
+  --color-carbono: #0d0d0d;
+  --color-carbono-low: #080808;
+  --color-carbono-surface: #121212;
+  --color-carbono-mid: #181818;
+  --color-carbono-high: #222222;
+  --color-carbono-highest: #2a2a2a;
   --color-cobalt: #0055ff;
   --color-cobalt-dark: #0039b3;
   --color-cobalt-light: #3377ff;
-  --color-text-primary: #f0eeec;
-  --color-text-muted: #c8cad8;
-  --color-text-faint: #8b8fa8;
+  --color-text-primary: #ffffff;
+  --color-text-muted: #e2e4f0;
+  --color-text-faint: #9ea4c0;
   --color-warn: #ffcc00;
   --color-err: #ff4444;
   --color-bronze: #b87333;
@@ -22,6 +22,11 @@
   --font-mono: 'IBM Plex Mono', monospace;
   --border-radius-none: 0px;
   --border-radius-DEFAULT: 0px;
+
+  /* Tama\u00f1os de texto est\u00e1ndar */
+  --font-size-ui-label: 10px;
+  --font-size-ui-value: 11px;
+  --font-size-ui-header: 13px;
 }
 
 * {
@@ -31,15 +36,45 @@
 html,
 body {
   font-family: 'IBM Plex Mono', monospace;
-  background-color: #1a1a1a;
-  color: #f0eeec;
+  background-color: #0d0d0d;
+  color: #ffffff;
+  font-size: 18px; /* Subimos la base para que todo escale */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Industrial Panel Style */
+.industrial-panel {
+  background-color: var(--color-carbono-surface);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid rgba(255, 255, 255, 0.15); /* Brillo en el borde superior */
+  box-shadow: 
+    inset 0 1px 1px rgba(255, 255, 255, 0.05),
+    inset 0 -1px 8px rgba(0, 0, 0, 0.6),
+    0 4px 12px rgba(0, 0, 0, 0.5);
+  position: relative;
+}
+
+/* Sutil textura de metal cepillado */
+.industrial-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(255,255,255,0.01) 1px, transparent 1px);
+  background-size: 4px 100%;
+  pointer-events: none;
+  opacity: 0.3;
 }
 
 ::selection {
   background-color: #0055ff;
   color: #ffffff;
+}
+
+/* Focus states for accessibility - keyboard navigation */
+:focus-visible {
+  outline: 2px solid #0055ff;
+  outline-offset: 2px;
 }
 
 /* Custom scrollbar */
@@ -167,4 +202,138 @@ body {
     transparent 1px,
     transparent 8px
   );
+}
+
+/* ── INDUSTRIAL ANIMATIONS ────────────────────────────────────────────── */
+
+/* Boot sequence - page loads */
+@keyframes boot-up {
+  0%   { opacity: 0; transform: scaleY(0.01); }
+  20%  { opacity: 1; transform: scaleY(1); filter: brightness(2); }
+  40%  { filter: brightness(1); }
+  100%  { opacity: 1; transform: scaleY(1); filter: brightness(1); }
+}
+
+.boot-up {
+  animation: boot-up 0.8s ease-out forwards;
+}
+
+/* Module loading bar */
+@keyframes loading-bar {
+  0%   { width: 0%; }
+  50%  { width: 70%; }
+  75%  { width: 85%; }
+  100%  { width: 100%; }
+}
+
+.loading-bar {
+  animation: loading-bar 2s ease-out forwards;
+}
+
+/* Typing cursor blink */
+@keyframes cursor-blink {
+  0%, 50%  { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.cursor-blink {
+  animation: cursor-blink 1s step-end infinite;
+}
+
+/* Pulse glow - industrial */
+@keyframes pulse-glow {
+  0%, 100%  { box-shadow: 0 0 2px rgba(0, 255, 65, 0.3); }
+  50%  { box-shadow: 0 0 8px rgba(0, 255, 65, 0.6); }
+}
+
+.pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Glitch text on hover */
+@keyframes glitch-text {
+  0%   { transform: translateX(0); }
+  10%  { transform: translateX(-2px); text-shadow: 2px 0 #ff0000, -2px 0 #00ffff; }
+  20%  { transform: translateX(2px); text-shadow: -2px 0 #ff0000, 2px 0 #00ffff; }
+  30%  { transform: translateX(0); text-shadow: none; }
+  100%  { transform: translateX(0); }
+}
+
+.glitch-text:hover {
+  animation: glitch-text 0.3s ease-out;
+}
+
+/* Status indicator pulse */
+@keyframes status-pulse {
+  0%, 100%  { transform: scale(1); opacity: 1; }
+  50%  { transform: scale(1.2); opacity: 0.7; }
+}
+
+.status-pulse {
+  animation: status-pulse 2s ease-in-out infinite;
+}
+
+/* Reveal on load - staggered */
+@keyframes reveal-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.reveal-up {
+  animation: reveal-up 0.4s ease-out forwards;
+}
+
+/* Stagger delays */
+.delay-1 { animation-delay: 0.1s; opacity: 0; }
+.delay-2 { animation-delay: 0.2s; opacity: 0; }
+.delay-3 { animation-delay: 0.3s; opacity: 0; }
+.delay-4 { animation-delay: 0.4s; opacity: 0; }
+
+/* ── ISLAND ANIMATIONS ─────────────────────────────────────────────── */
+
+/* Island load-in - slide up + fade */
+@keyframes island-load {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.island-load {
+  animation: island-load 0.3s ease-out forwards;
+}
+
+/* Island scale-in - for modals */
+@keyframes island-scale {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.island-scale {
+  animation: island-scale 0.25s ease-out forwards;
+}
+
+/* Island fade-in - subtle */
+@keyframes island-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.island-fade {
+  animation: island-fade 0.2s ease-out forwards;
+}
+
+/* Placeholder shimmer - while island loads */
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.island-placeholder {
+  background: linear-gradient(
+    90deg,
+    rgba(34, 34, 34, 0) 0%,
+    rgba(34, 34, 34, 0.5) 50%,
+    rgba(34, 34, 34, 0) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
 }

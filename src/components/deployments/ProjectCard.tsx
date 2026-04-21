@@ -65,17 +65,17 @@ export default function ProjectCard({ project, onClick }: ProjectCardProps) {
   const entropyStyle = isGold ? {} : getEntropyStyle(project.pushedAt, settings.dustThresholdDays);
 
   if (!visible) return (
-    <div ref={ref} className="h-[150px] border border-white/5 bg-carbono-surface animate-pulse" />
+    <div ref={ref} className="aspect-square border border-white/5 bg-carbono-surface animate-pulse" />
   );
 
   return (
-    <div ref={ref}>
+    <div ref={ref} data-project-id={project.id}>
       {/*
         Full-image card: photo fills the entire card,
         info overlaid at the bottom with a gradient.
       */}
       <div
-        className={`relative h-[150px] cursor-pointer group overflow-hidden border transition-all duration-150
+        className={`relative aspect-square cursor-pointer group overflow-hidden border transition-all duration-150
           ${isGold
             ? 'border-bronze crt-flicker'
             : 'border-white/10 hover:border-white/40'
@@ -84,7 +84,21 @@ export default function ProjectCard({ project, onClick }: ProjectCardProps) {
           boxShadow: isGold ? '0 0 24px rgba(184,115,51,0.2)' : undefined,
           ...entropyStyle,
         }}
-        onClick={() => onClick(project)}
+        onClick={() => {
+          onClick(project);
+          const dustThresholdDays = settings.dustThresholdDays || 60;
+          const daysSinceUpdate = project.pushedAt ? (Date.now() - new Date(project.pushedAt).getTime()) / 86_400_000 : 0;
+          const isDusty = daysSinceUpdate > dustThresholdDays;
+
+          window.dispatchEvent(new CustomEvent('portfolioTerminalEvent', {
+            detail: { 
+              type: 'MODULE_ACCESS', 
+              projectName: project.name, 
+              isGold,
+              isDusty
+            }
+          }));
+        }}
       >
         {/* Background image — fills entire card */}
         {project.photo ? (
@@ -123,14 +137,14 @@ export default function ProjectCard({ project, onClick }: ProjectCardProps) {
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
 
         {/* Top-left badges */}
-        <div className="absolute top-1.5 left-1.5 flex gap-1">
+        <div className="absolute top-2 left-2 flex gap-1.5">
           {status && statusStyle[status] && (
-            <span className={`text-[8px] font-bold tracking-widest uppercase border px-1.5 py-0.5 leading-none backdrop-blur-sm ${statusStyle[status]}`}>
+            <span className={`text-[10px] font-bold tracking-widest uppercase border px-2 py-1 leading-none backdrop-blur-sm ${statusStyle[status]}`}>
               {status.replace('_', ' ')}
             </span>
           )}
           {project.isFavorite && (
-            <span className="text-[8px] font-bold tracking-widest uppercase border px-1.5 py-0.5 leading-none text-bronze border-bronze/50 bg-bronze/20 backdrop-blur-sm">
+            <span className={`text-[10px] font-bold tracking-widest uppercase border px-2 py-1 leading-none text-bronze border-bronze/50 bg-bronze/20 backdrop-blur-sm`}>
               PINNED
             </span>
           )}
@@ -145,20 +159,18 @@ export default function ProjectCard({ project, onClick }: ProjectCardProps) {
         )}
 
         {/* Bottom info overlay */}
-        <div className="absolute bottom-0 left-0 right-0 px-2.5 pb-2 pt-4">
-          <p className={`text-[11px] font-bold tracking-widest uppercase leading-tight
-            ${isGold ? 'text-bronze' : 'text-white'}`}>
+        <div className="absolute bottom-0 left-0 right-0 px-3 pb-3 pt-6">
+          <p className="text-[var(--font-size-ui-header)] font-bold tracking-widest uppercase leading-tight text-white">
             {project.name}
           </p>
-          <div className="flex flex-wrap gap-1 mt-1">
+          <div className="flex flex-wrap gap-1.5 mt-2">
             {[...new Set(project.stack)].slice(0, 3).map(tech => (
-              <span key={tech} className={`text-[8px] border px-1 py-0.5 tracking-widest uppercase backdrop-blur-sm
-                ${isGold ? 'border-bronze/40 text-bronze/80 bg-black/40' : 'border-white/25 text-white/70 bg-black/40'}`}>
+              <span key={tech} className="text-[var(--font-size-ui-label)] border px-2 py-1 tracking-widest uppercase backdrop-blur-sm border-white/25 text-white/70 bg-black/40">
                 {tech}
               </span>
             ))}
             {project.stack.length > 3 && (
-              <span className="text-[8px] text-white/60 py-0.5">+{project.stack.length - 3}</span>
+              <span className="text-[var(--font-size-ui-label)] text-white/60 py-1">+{project.stack.length - 3}</span>
             )}
           </div>
         </div>

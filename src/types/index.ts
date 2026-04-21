@@ -5,6 +5,8 @@ export interface Project {
   stack: string[];
   architecture: string;
   initSequence: string;
+  description?: string;
+  businessImpact?: string;
   specs: Record<string, string | string[]>;
   isHighlighted?: boolean;
   isPrivate?: boolean;

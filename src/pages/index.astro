@@ -5,77 +5,113 @@ import ProjectGrid from '../components/deployments/ProjectGrid';
 import TechMatrix from '../components/techstack/TechMatrix';
 import LogsPanel from '../components/systemlogs/LogsPanel';
 import Roadmap from '../components/ambitions/Roadmap';
-import { logs, ambitions, techStack, identity } from '../data/portfolio';
+import { ambitions } from '../data/portfolio';
+import identity from '../../public/data/identity.json';
+import logs from '../../public/data/logs.json';
 import settings from '../../public/data/settings.json';
+import techStack from '../../public/data/techstack.json';
+import projects from '../../public/data/projects.json';
+
+// Merge identity with settings (settings override identity for dynamic values)
+const identityData = {
+  ...identity,
+  status: settings.status ?? identity.status,
+  availabilityValue: settings.availabilityValue ?? identity.availabilityValue,
+  cvUrl: settings.cvUrl ?? identity.cvUrl,
+  linkedinUrl: settings.linkedinUrl ?? identity.linkedinUrl,
+};
+
+const totalProjects = projects.length;
+const totalTech = techStack.length;
 ---
 
-<BaseLayout>
-  <div class="w-full px-4 sm:px-6 lg:px-8 py-4 lg:py-6">
-    <div class="flex flex-col lg:grid lg:grid-cols-[300px_1fr] gap-4 lg:gap-6 lg:items-start">
-
-      <!-- ── LEFT: sticky identity panel ─────────────────── -->
-      <div class="flex flex-col gap-3
-                  lg:sticky lg:top-[60px]
-                  lg:max-h-[calc(100vh-68px)]
-                  lg:overflow-hidden">
-
-        <IdentitySection
-          {...identity}
-          status={settings.status ?? identity.status}
-          availabilityValue={settings.availabilityValue ?? identity.availabilityValue}
-          cvUrl={settings.cvUrl}
-          linkedinUrl={settings.linkedinUrl}
-          client:load
-        />
-
-        <!-- System Logs: desktop only, fills remaining sticky space -->
-        <div class="hidden lg:flex lg:flex-col lg:flex-1 lg:min-h-0">
-          <div class="mb-2 pb-2 border-b border-white/[0.08] flex-shrink-0">
-            <h2 class="text-[0.85rem] font-bold text-[#f0eeec] uppercase tracking-[0.04em] font-mono">System Logs</h2>
-          </div>
-          <div class="flex-1 min-h-0 overflow-y-auto">
-            <LogsPanel logs={logs} client:load />
+<BaseLayout 
+  title={`${identityData.name.replace('\n', ' ')} \u2014 Systems Engineer`} 
+  description={identityData.bio}
+  handle={identityData.handle}
+  status={identityData.status}
+>
+  <div class="w-full h-[calc(100vh-48px)] p-2 md:p-3 overflow-hidden flex flex-col gap-2 md:gap-3 boot-up">
+    
+    <!-- DESKTOP: 2-column layout -->
+    <div class="hidden md:grid md:grid-cols-[420px_1fr] flex-1 min-h-0 gap-3">
+      
+      <!-- LEFT: Identity + Terminal -->
+      <aside class="flex flex-col gap-3 min-h-0">
+        <IdentitySection {...identityData} client:idle />
+        <div class="flex-1 min-h-[18rem] border border-white/10 bg-carbono-surface overflow-hidden">
+          <div class="h-full overflow-y-auto">
+            <LogsPanel logs={logs} logLimit={settings.logLimit ?? 10} client:idle />
           </div>
         </div>
+      </aside>
 
-      </div>
-
-      <!-- ── RIGHT: natural flow content ─────────────────── -->
-      <div class="flex flex-col gap-6">
-
-        <!-- Projects -->
-        <section id="deployments">
-          <div class="mb-3 pb-2 border-b border-white/[0.08]">
-            <h2 class="text-[0.85rem] font-bold text-[#f0eeec] uppercase tracking-[0.04em] font-mono">Projects</h2>
+      <!-- RIGHT: Projects TOP, TechStack+Roadmap BOTTOM (side by side) -->
+      <main class="flex flex-col gap-3 min-h-0">
+        
+        <!-- PROJECTS (arriba) -->
+        <section class="border border-white/10 bg-carbono-surface p-3 overflow-hidden" style="flex: 1.2">
+          <div class="h-full overflow-y-auto">
+            <div className="flex items-center justify-between mb-3 pb-2 border-b border-white/10">
+              <span class="text-[13px] font-bold text-white tracking-widest">// PROJECTS</span>
+            </div>
+            <ProjectGrid client:idle />
           </div>
-          <ProjectGrid client:visible />
         </section>
 
-        <!-- Technologies -->
-        <section id="tech">
-          <div class="mb-3 pb-2 border-b border-white/[0.08]">
-            <h2 class="text-[0.85rem] font-bold text-[#f0eeec] uppercase tracking-[0.04em] font-mono">Technologies & Tools</h2>
-          </div>
-          <TechMatrix tools={techStack} client:load />
-        </section>
+        <!-- BOTTOM: Dashboard de M\u00f3dulos -->
+        <div class="grid grid-cols-3 gap-3 min-h-0" style="flex: 2">
 
-        <!-- Ambitions -->
-        <section id="ambitions">
-          <div class="mb-3 pb-2 border-b border-white/[0.08]">
-            <h2 class="text-[0.85rem] font-bold text-[#f0eeec] uppercase tracking-[0.04em] font-mono">Ambitions</h2>
-          </div>
-          <Roadmap ambitions={ambitions} client:idle />
-        </section>
+          <!-- TechStack -->
+          <section class="border border-white/10 bg-carbono-surface p-3 overflow-hidden">
+            <div class="h-full overflow-y-auto">
+              <div class="flex items-center justify-between mb-2 pb-2 border-b border-white/10">
+                <span class="text-[13px] font-bold text-white tracking-widest">// TECH_STACK_RECENT</span>
+              </div>
+              <TechMatrix tools={techStack} client:idle />
+            </div>
+          </section>
 
-        <!-- System Logs: mobile only -->
-        <section class="lg:hidden">
-          <div class="mb-3 pb-2 border-b border-white/[0.08]">
-            <h2 class="text-[0.85rem] font-bold text-[#f0eeec] uppercase tracking-[0.04em] font-mono">System Logs</h2>
-          </div>
-          <LogsPanel logs={logs} client:idle />
-        </section>
-
-      </div>
+          <!-- Roadmap (Ahora con m\u00e1s aire vertical, menos horizontal) -->
+          <section class="border border-white/10 bg-carbono-surface p-3 overflow-hidden col-span-2">
+            <div class="h-full overflow-y-auto">
+              <div class="flex items-center justify-between mb-2 pb-2 border-b border-white/10">
+                <span class="text-[13px] font-bold text-white tracking-widest">// ROADMAP</span>
+              </div>
+              <Roadmap ambitions={ambitions} client:idle />
+            </div>
+          </section>
+        </div>
+      </main>
+      
     </div>
+
+    <!-- MOBILE: stacked - same order but compact -->
+    <div class="md:hidden flex-1 min-h-0 overflow-y-auto flex flex-col gap-3">
+      <IdentitySection {...identityData} client:idle />
+      
+      <section class="border border-white/10 bg-carbono-surface p-3">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-[13px] font-bold text-white tracking-widest">/// PROJECTS</span>
+        </div>
+        <ProjectGrid client:idle />
+      </section>
+
+      <section class="border border-white/10 bg-carbono-surface p-3">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-[13px] font-bold text-white tracking-widest">/// TECH_STACK</span>
+          <span class="text-[8px] text-text-faint">{techStack.length} MODULES</span>
+        </div>
+        <TechMatrix tools={techStack} client:idle />
+      </section>
+
+      <section class="border border-white/10 bg-carbono-surface p-3">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-[13px] font-bold text-white tracking-widest">/// ROADMAP</span>
+        </div>
+        <Roadmap ambitions={ambitions} client:idle />
+      </section>
+    </div>
+
   </div>
 </BaseLayout>

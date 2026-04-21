@@ -10,9 +10,9 @@ const STORAGE_KEY = 'portfolio_ambitions_v2';
 const SESSION_KEY = 'admin_session';
 
 const sectionMeta: Record<Ambition['section'], { label: string; timeframe: string }> = {
-  short: { label: 'SHORT_TERM', timeframe: '0-3 MONTHS' },
-  mid:   { label: 'MID_TERM',   timeframe: '3-12 MONTHS' },
-  long:  { label: 'LONG_TERM',  timeframe: '1+ YEAR' },
+  short: { label: 'PHASE_01: IMMEDIATE', timeframe: '0-3 MONTHS' },
+  mid:   { label: 'PHASE_02: STRATEGIC', timeframe: '3-12 MONTHS' },
+  long:  { label: 'PHASE_03: VISION',    timeframe: '1+ YEAR' },
 };
 
 export default function Roadmap({ ambitions: initial }: RoadmapProps) {
@@ -22,14 +22,8 @@ export default function Roadmap({ ambitions: initial }: RoadmapProps) {
   const [adding, setAdding] = useState<Ambition['section'] | null>(null);
   const [newText, setNewText] = useState('');
 
-  const STORAGE_KEY = 'portfolio_ambitions_v2';
-  const SESSION_KEY = 'admin_session';
-
-  const sectionMeta: Record<Ambition['section'], { label: string; timeframe: string }> = {
-    short: { label: 'SHORT_TERM', timeframe: '0-3 MONTHS' },
-    mid:   { label: 'MID_TERM',   timeframe: '3-12 MONTHS' },
-    long:  { label: 'LONG_TERM',  timeframe: '1+ YEAR' },
-  };
+  const STORAGE_KEY_V2 = 'portfolio_ambitions_v2';
+  const SESSION_KEY_V2 = 'admin_session';
 
   useEffect(() => {
     setIsAdmin(sessionStorage.getItem(SESSION_KEY) === 'true');
@@ -118,21 +112,21 @@ export default function Roadmap({ ambitions: initial }: RoadmapProps) {
   const removeGoal = (id: string) => setItems(prev => prev.filter(a => a.id !== id));
 
   return (
-    <div className="border border-white/10 bg-carbono-surface p-2">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+    <div className="border border-white/10 bg-carbono-surface p-4 island-load h-full overflow-y-auto">
+      <div className="flex flex-col gap-6">
         {(['short', 'mid', 'long'] as const).map(section => {
           const sectionItems = items.filter(a => a.section === section);
           const { label, timeframe } = sectionMeta[section];
           return (
-            <div key={section} className="border border-white/10 bg-carbono p-3 flex flex-col gap-2">
-              <div className="border-b border-white/10 pb-2">
-                <p className="text-[12px] text-cobalt tracking-widest font-bold">{label}</p>
-                <p className="text-[12px] text-text-faint tracking-widest">({timeframe})</p>
+            <div key={section} className="border border-white/10 bg-carbono p-4 flex flex-col gap-3">
+              <div className="flex justify-between items-end border-b border-white/10 pb-2">
+                <p className="text-[14px] text-cobalt tracking-widest font-bold">{label}</p>
+                <p className="text-[11px] text-text-faint tracking-widest italic">{timeframe}</p>
               </div>
 
-              <div className="flex flex-col gap-1.5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2">
                 {sectionItems.length === 0 && (
-                  <p className="text-[12px] text-text-faint tracking-widest">NO_GOALS_REGISTERED</p>
+                  <p className="text-[14px] text-text-faint tracking-widest">NO_GOALS_REGISTERED</p>
                 )}
                 {sectionItems.map(a => (
                   <div key={a.id} className="flex items-start gap-1 group">
@@ -146,7 +140,7 @@ export default function Roadmap({ ambitions: initial }: RoadmapProps) {
                     {isAdmin && (
                       <button
                         onClick={() => removeGoal(a.id)}
-                        className="text-[12px] text-err/50 hover:text-err transition-colors flex-shrink-0 mt-0.5 opacity-0 group-hover:opacity-100"
+                        className="text-[14px] text-err/50 hover:text-err transition-colors flex-shrink-0 mt-0.5 opacity-0 group-hover:opacity-100"
                       >×</button>
                     )}
                   </div>
@@ -165,17 +159,17 @@ export default function Roadmap({ ambitions: initial }: RoadmapProps) {
                         if (e.key === 'Escape') { setAdding(null); setNewText(''); }
                       }}
                       placeholder="New goal..."
-                      className="bg-carbono-surface border border-white/20 px-2 py-1 text-[12px] text-white font-mono w-full focus:outline-none focus:border-cobalt"
+                      className="bg-carbono-surface border border-white/20 px-2 py-1 text-[14px] text-white font-mono w-full focus:outline-none focus:border-cobalt"
                     />
                     <div className="flex gap-1">
-                      <button onClick={() => addGoal(section)} className="flex-1 bg-cobalt text-white text-[12px] tracking-widest py-1 hover:bg-cobalt-light transition-colors">ADD</button>
-                      <button onClick={() => { setAdding(null); setNewText(''); }} className="text-[12px] text-text-faint px-2 hover:text-white">CANCEL</button>
+                      <button onClick={() => addGoal(section)} className="flex-1 bg-cobalt text-white text-[14px] tracking-widest py-1 hover:bg-cobalt-light transition-colors">ADD</button>
+                      <button onClick={() => { setAdding(null); setNewText(''); }} className="text-[14px] text-text-faint px-2 hover:text-white">CANCEL</button>
                     </div>
                   </div>
                 ) : (
                   <button
                     onClick={() => { setAdding(section); setNewText(''); }}
-                    className="text-[12px] text-text-faint hover:text-cobalt tracking-widest uppercase transition-colors mt-1 text-left"
+                    className="text-[14px] text-text-faint hover:text-cobalt tracking-widest uppercase transition-colors mt-1 text-left"
                   >
                     + ADD_GOAL
                   </button>

@@ -4,8 +4,11 @@ import type { LogEntry, Project } from '../../types';
 const CACHE_KEY = 'portfolioGitHubLogs';
 const CACHE_TS_KEY = 'portfolioGitHubLogsTs';
 const PROJECTS_TS_KEY = 'portfolioProjectsRefreshTs';
-const POLL_MS = 2 * 60 * 60 * 1000;
+const NEXT_SYNC_TS_KEY = 'portfolioNextSyncTs';
+const POLL_MS = 60 * 60 * 1000;
 const GITHUB_TOKEN = import.meta.env.PUBLIC_GITHUB_TOKEN;
+
+const isBrowser = typeof window !== 'undefined';
 
 function ghHeaders(): HeadersInit {
   const h: Record<string, string> = { Accept: 'application/vnd.github+json' };
@@ -28,49 +31,55 @@ const levelBg: Record<LogEntry['level'], string> = {
 
 function eventToEntry(e: Record<string, unknown>, index: number): LogEntry | null {
   const repo = (e.repo as { name?: string })?.name ?? '';
-  const repoShort = repo.split('/')[1] ?? repo;
+  const repoShort = (repo.split('/')[1] ?? repo).toUpperCase();
   const createdAt = typeof e.created_at === 'string' ? e.created_at : '';
   const ts = createdAt.slice(0, 19).replace('T', ' ');
   const id = `gh-${e.id ?? index}`;
   const payload = e.payload as Record<string, unknown> ?? {};
 
+  const prefix = 'GH';
+
   switch (e.type) {
     case 'PushEvent': {
       const commits = payload.commits as { message: string }[] ?? [];
       const count = commits.length;
-      const msg = commits[0]?.message?.split('\n')[0] ?? '';
-      return { id, timestamp: ts, level: 'INFO', message: `PUSH ${repoShort} — "${msg}"${count > 1 ? ` (+${count - 1})` : ''}` };
+      let msg = commits[0]?.message?.split('\n')[0] ?? '';
+      if (!msg || msg.trim() === '') msg = 'SYSTEM_UPDATE';
+      return { id, timestamp: ts, level: 'INFO', message: `[${prefix}] PUSH ${repoShort} — "${msg}"${count > 1 ? ` (+${count - 1})` : ''}` };
     }
     case 'PullRequestEvent': {
       const pr = payload.pull_request as { title?: string; number?: number; merged?: boolean } ?? {};
+      const title = pr.title || 'MANUAL_MERGE';
       if (payload.action === 'closed' && pr.merged)
-        return { id, timestamp: ts, level: 'MILESTONE', message: `MERGED PR #${pr.number} — ${pr.title} [${repoShort}]` };
+        return { id, timestamp: ts, level: 'MILESTONE', message: `[${prefix}] MERGED PR #${pr.number} — ${title} [${repoShort}]` };
       if (payload.action === 'opened')
-        return { id, timestamp: ts, level: 'INFO', message: `PR OPENED #${pr.number} — ${pr.title} [${repoShort}]` };
+        return { id, timestamp: ts, level: 'INFO', message: `[${prefix}] PR OPENED #${pr.number} — ${title} [${repoShort}]` };
       return null;
     }
     case 'CreateEvent': {
       const ref = typeof payload.ref === 'string' ? payload.ref : '';
       const refType = typeof payload.ref_type === 'string' ? payload.ref_type : '';
-      if (refType === 'tag') return { id, timestamp: ts, level: 'MILESTONE', message: `TAGGED ${repoShort} @ ${ref}` };
-      if (refType === 'branch') return { id, timestamp: ts, level: 'INFO', message: `BRANCH CREATED ${ref} [${repoShort}]` };
+      if (refType === 'tag') return { id, timestamp: ts, level: 'MILESTONE', message: `[${prefix}] TAGGED ${repoShort} @ ${ref}` };
+      if (refType === 'branch') return { id, timestamp: ts, level: 'INFO', message: `[${prefix}] BRANCH CREATED ${ref || 'main'} [${repoShort}]` };
       return null;
     }
     case 'DeleteEvent': {
       const ref = typeof payload.ref === 'string' ? payload.ref : '';
       const refType = typeof payload.ref_type === 'string' ? payload.ref_type : '';
-      if (refType === 'branch') return { id, timestamp: ts, level: 'WARN', message: `BRANCH DELETED ${ref} [${repoShort}]` };
+      if (refType === 'branch') return { id, timestamp: ts, level: 'WARN', message: `[${prefix}] BRANCH DELETED ${ref} [${repoShort}]` };
       return null;
     }
     case 'IssuesEvent': {
       const issue = payload.issue as { title?: string; number?: number } ?? {};
+      const title = issue.title || 'SYSTEM_TICKET';
       if (payload.action === 'opened')
-        return { id, timestamp: ts, level: 'WARN', message: `ISSUE #${issue.number} — ${issue.title} [${repoShort}]` };
+        return { id, timestamp: ts, level: 'WARN', message: `[${prefix}] ISSUE #${issue.number} — ${title} [${repoShort}]` };
       return null;
     }
     case 'ReleaseEvent': {
       const release = payload.release as { tag_name?: string; name?: string } ?? {};
-      return { id, timestamp: ts, level: 'MILESTONE', message: `RELEASED ${release.tag_name ?? release.name} [${repoShort}]` };
+      const name = release.name || release.tag_name || 'STABLE_RELEASE';
+      return { id, timestamp: ts, level: 'MILESTONE', message: `[${prefix}] RELEASED ${name} [${repoShort}]` };
     }
     default:
       return null;
@@ -78,6 +87,7 @@ function eventToEntry(e: Record<string, unknown>, index: number): LogEntry | nul
 }
 
 function getUsername(): string {
+  if (!isBrowser) return 'Alejandro-M-P';
   try {
     const stored = localStorage.getItem('portfolioProjects');
     if (!stored) return 'Alejandro-M-P';
@@ -91,6 +101,7 @@ function getUsername(): string {
 }
 
 async function refreshProjectsFromGitHub(): Promise<void> {
+  if (!isBrowser) return;
   const ts = localStorage.getItem(PROJECTS_TS_KEY);
   if (ts && Date.now() - Number(ts) < POLL_MS) return;
 
@@ -136,6 +147,7 @@ interface LogTerminalProps {
 }
 
 function getActivityLog(): LogEntry[] {
+  if (!isBrowser) return [];
   try { return JSON.parse(localStorage.getItem('portfolioActivityLog') ?? '[]'); } catch { return []; }
 }
 
@@ -144,15 +156,27 @@ export default function LogTerminal({ logs, logLimit = 10, hideHeader = false }:
   const [liveEntries, setLiveEntries]     = useState<LogEntry[]>([]);
   const [activityEntries, setActivityEntries] = useState<LogEntry[]>(getActivityLog());
   const [fetching, setFetching] = useState(false);
-  const [lastFetch, setLastFetch] = useState<string | null>(null);
+  
+  const getInitialTimeLeft = () => {
+    if (!isBrowser) return POLL_MS / 1000;
+    const nextSyncTs = localStorage.getItem(NEXT_SYNC_TS_KEY);
+    if (!nextSyncTs) return POLL_MS / 1000;
+    const remaining = Math.floor((Number(nextSyncTs) - Date.now()) / 1000);
+    return remaining > 0 ? remaining : POLL_MS / 1000;
+  };
+  
+  const [nextSyncIn, setNextSyncIn] = useState(getInitialTimeLeft());
 
   async function fetchGitHubActivity(skipCache = false) {
+    if (!isBrowser) return;
     if (!skipCache) {
       const ts = localStorage.getItem(CACHE_TS_KEY);
       const cached = localStorage.getItem(CACHE_KEY);
       if (ts && cached && Date.now() - Number(ts) < POLL_MS) {
         setLiveEntries(JSON.parse(cached));
-        setLastFetch(new Date(Number(ts)).toLocaleTimeString());
+        const nextSync = Number(ts) + POLL_MS;
+        localStorage.setItem(NEXT_SYNC_TS_KEY, String(nextSync));
+        setNextSyncIn(Math.max(0, Math.floor((nextSync - Date.now()) / 1000)));
         return;
       }
     }
@@ -187,35 +211,99 @@ export default function LogTerminal({ logs, logLimit = 10, hideHeader = false }:
         .filter((e): e is LogEntry => e !== null)
         .slice(0, logLimit);
 
+      const now = Date.now();
+      
+      // Si no hay nada nuevo, dejamos constancia
+      if (entries.length === 0 || (liveEntries.length > 0 && entries[0]?.id === liveEntries[0]?.id)) {
+        const syncLog: LogEntry = {
+          id: `sync-${now}`,
+          timestamp: new Date().toISOString().slice(0, 19).replace('T', ' '),
+          level: 'INFO',
+          message: '[GH] UPLINK_SYNC_COMPLETE \u2014 No new activity detected.'
+        };
+        setLiveEntries(prev => [syncLog, ...prev].slice(0, logLimit));
+      } else {
+        setLiveEntries(entries);
+      }
+
       localStorage.setItem(CACHE_KEY, JSON.stringify(entries));
-      localStorage.setItem(CACHE_TS_KEY, String(Date.now()));
+      localStorage.setItem(CACHE_TS_KEY, String(now));
+      localStorage.setItem(NEXT_SYNC_TS_KEY, String(now + POLL_MS));
       setLiveEntries(entries);
-      setLastFetch(new Date().toLocaleTimeString());
+      setNextSyncIn(POLL_MS / 1000);
     } catch {}
     finally { setFetching(false); }
   }
 
   useEffect(() => {
-    localStorage.removeItem(CACHE_KEY);
-    localStorage.removeItem(CACHE_TS_KEY);
-    fetchGitHubActivity(true);
+    fetchGitHubActivity(false);
     refreshProjectsFromGitHub();
 
     const interval = setInterval(() => {
-      fetchGitHubActivity(false);
-      refreshProjectsFromGitHub();
+      if (document.visibilityState === 'visible') {
+        fetchGitHubActivity(false);
+        refreshProjectsFromGitHub();
+      }
     }, POLL_MS);
 
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        setNextSyncIn(prev => {
+          if (prev <= 1) return POLL_MS / 1000;
+          return prev - 1;
+        });
+      }
+    }, 1000);
+
     const onActivity = () => setActivityEntries(getActivityLog());
+    const onTerminalEvent = (e: any) => {
+      const { type, projectName, isGold, isDusty } = e.detail;
+      const ts = new Date().toISOString().slice(0, 19).replace('T', ' ');
+      
+      let level: LogEntry['level'] = 'INFO';
+      let message = '';
+
+      if (isGold) {
+        level = 'MILESTONE';
+        message = `[ALERT] GOLD_TARGET_DETECTED: ${projectName} — (High Value Infrastructure)`;
+      } else if (isDusty) {
+        level = 'WARN';
+        message = `[INFO] RECOVERING_LEGACY_MODULE: ${projectName} — (Cleaning dust...)`;
+      } else {
+        message = `[GUEST] ACCESSING_MODULE: ${projectName} — (Protocol: READ_ONLY)`;
+      }
+
+      const newEntry: LogEntry = {
+        id: `event-${Date.now()}`,
+        timestamp: ts,
+        level,
+        message
+      };
+      setActivityEntries(prev => [...prev, newEntry].slice(-logLimit));
+    };
+
     window.addEventListener('portfolioActivityLogged', onActivity);
+    window.addEventListener('portfolioTerminalEvent', onTerminalEvent);
 
     return () => {
       clearInterval(interval);
+      clearInterval(timer);
       window.removeEventListener('portfolioActivityLogged', onActivity);
+      window.removeEventListener('portfolioTerminalEvent', onTerminalEvent);
     };
   }, []);
 
-  const combined: LogEntry[] = [...logs, ...liveEntries, ...activityEntries]
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const combined: LogEntry[] = [
+    ...logs.map(l => ({ ...l, message: l.message.startsWith('[SYS]') ? l.message : `[SYS] ${l.message}` })),
+    ...liveEntries,
+    ...activityEntries.map(l => ({ ...l, message: l.message.startsWith('[ADM]') ? l.message : `[ADM] ${l.message}` }))
+  ]
     .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
     .slice(-logLimit);
 
@@ -226,13 +314,13 @@ export default function LogTerminal({ logs, logLimit = 10, hideHeader = false }:
   }, [combined.length]);
 
   return (
-    <div className={`${hideHeader ? '' : 'border border-white/10 bg-carbono-surface'} w-full flex flex-col h-full`}>
+    <div className={`${hideHeader ? '' : 'border border-white/10 bg-carbono-surface'} w-full flex flex-col h-full overflow-hidden`}>
       {!hideHeader && (
         <div
           className="border-b border-white/10 px-4 py-3 flex items-center gap-3 bg-carbono cursor-pointer hover:bg-carbono/20"
           onClick={() => window.dispatchEvent(new CustomEvent('openTerminal'))}
         >
-          <span className="text-xs text-text-faint tracking-widest uppercase">SYSTEM LOGS &gt;_</span>
+          <span className="text-xs text-text-faint tracking-widest uppercase">TERMINAL &gt;_</span>
           <div className="flex gap-1.5 ml-auto">
             <div className="w-2 h-2 bg-err/60" />
             <div className="w-2 h-2 bg-warn/60" />
@@ -245,38 +333,65 @@ export default function LogTerminal({ logs, logLimit = 10, hideHeader = false }:
         </div>
       )}
 
-      <div className="px-4 py-2 border-b border-white/5 bg-carbono-low flex items-center justify-between">
-        <span className="text-xs text-text-faint">
-          <span className="text-cobalt">gest@portfolio ~/ </span>
-          tail -f /var/log/system.log
-        </span>
-        {lastFetch && (
-          <span className="text-[10px] text-text-faint tracking-widest">
-            synced {lastFetch} · next in 2h
+      <div className="px-4 py-1.5 border-b border-white/5 bg-carbono-low flex justify-between items-center">
+        <div className="flex items-center gap-3">
+          <span className="text-[12px] text-text-faint tracking-widest uppercase">
+            // GH_UPLINK
           </span>
+          <span className="text-[12px] text-white/30 tracking-widest font-mono">
+            [ SYNC: {formatTime(nextSyncIn)} ]
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="relative flex h-1.5 w-1.5">
+            <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${fetching ? 'bg-warn' : 'bg-cobalt'} opacity-75`}></span>
+            <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${fetching ? 'bg-warn' : 'bg-cobalt'}`}></span>
+          </span>
+          <span className={`text-[12px] ${fetching ? 'text-warn' : 'text-cobalt'} tracking-widest`}>
+            {fetching ? 'SYNCING...' : 'ESTABLISHED'}
+          </span>
+        </div>
+      </div>
+
+      <div ref={containerRef} className="overflow-y-auto overflow-x-hidden flex-1 min-h-0 p-3 flex flex-col gap-1 whitespace-normal break-all">
+        {combined.length === 0 ? (
+          <div className="text-xs text-text-faint tracking-widest">
+            <span>NO RECENT ACTIVITY</span><br />
+            <span className="text-cobalt">Waiting for data stream...</span>
+          </div>
+        ) : (
+          combined.map((entry) => {
+            const isGold = entry.message.includes('GOLD');
+            const isGuest = entry.message.includes('[GUEST]');
+            const isCommand = entry.level === 'INFO' && !entry.message.startsWith('[GH]') && !entry.message.startsWith('[SYS]');
+            
+            const colorClass = isGold ? 'text-bronze-light' : (isGuest || isCommand ? 'text-[#00ff41]' : levelColors[entry.level]);
+
+            return (
+              <div key={entry.id} className={`text-xs leading-relaxed px-2 py-1 ${levelBg[entry.level]}`}>
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-text-faint tabular-nums text-[10px] shrink-0">{entry.timestamp}</span>
+                  <span className={`font-bold text-[10px] shrink-0 ${colorClass}`}>
+                    [{entry.level}]
+                  </span>
+                </div>
+                <span className={`${colorClass} wrap-break-word whitespace-normal`}>{entry.message}</span>
+              </div>
+            );
+          })
         )}
       </div>
 
-      <div ref={containerRef} className="overflow-y-auto overflow-x-hidden flex-1 min-h-0 p-3 flex flex-col gap-1">
-        {combined.length === 0 ? (
-          <div className="text-xs text-text-faint tracking-widest">
-<span>NO RECENT ACTIVITY</span><br />
-                <span className="text-cobalt">Waiting for data stream...</span>
-          </div>
-        ) : (
-          combined.map((entry) => (
-            <div key={entry.id} className={`text-xs leading-relaxed px-2 py-1 ${levelBg[entry.level]}`}>
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className="text-text-faint tabular-nums text-[10px] shrink-0">{entry.timestamp}</span>
-                <span className={`font-bold text-[10px] shrink-0 ${levelColors[entry.level]}`}>[{entry.level}]</span>
-              </div>
-              <span className={`${levelColors[entry.level]} wrap-break-word`}>{entry.message}</span>
-            </div>
-          ))
-        )}
-        <div className="flex gap-3 text-xs mt-2">
-          <span className="text-cobalt">gest@portfolio ~/ </span>
+      {/* FIXED FOOTER PART */}
+      <div className="p-3 border-t border-white/5 bg-carbono-low flex flex-col gap-2 shrink-0">
+        <div className="flex gap-3 text-xs">
+          <span className="text-cobalt">admin @src/data/portfolio.ts ~/ </span>
           <span className="text-white/40 animate-pulse">█</span>
+        </div>
+        <div className="opacity-40">
+          <p className="text-[10px] text-text-faint tracking-widest leading-relaxed uppercase">
+            // [SYSTEM_HINT]: This panel tracks live GitHub commits and infrastructure updates.
+          </p>
         </div>
       </div>
     </div>

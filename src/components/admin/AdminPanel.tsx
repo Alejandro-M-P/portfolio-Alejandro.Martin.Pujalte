@@ -8,8 +8,8 @@ const SESSION_TS    = 'admin_session_ts';
 const ATTEMPTS_KEY  = 'admin_attempts';
 const LOCKOUT_KEY   = 'admin_lockout';
 const MAX_ATTEMPTS  = 3;
-const LOCKOUT_MS    = 5 * 60 * 1000; // 5 min
-const SESSION_TTL   = 30 * 60 * 1000; // 30 min
+const LOCKOUT_MS    = 5 * 60 * 1000;
+const SESSION_TTL   = 30 * 60 * 1000;
 
 async function sha256(text: string): Promise<string> {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
@@ -17,32 +17,24 @@ async function sha256(text: string): Promise<string> {
 }
 
 function isSessionValid(): boolean {
+  if (typeof window === 'undefined') return false;
   if (sessionStorage.getItem(SESSION_KEY) !== 'true') return false;
   const ts = Number(sessionStorage.getItem(SESSION_TS) ?? 0);
   if (Date.now() - ts > SESSION_TTL) {
-    sessionStorage.removeItem(SESSION_KEY);
-    sessionStorage.removeItem(SESSION_TS);
+    sessionStorage.removeItem(SESSION_KEY); sessionStorage.removeItem(SESSION_TS);
     return false;
   }
   return true;
 }
 
-function touchSession() {
-  sessionStorage.setItem(SESSION_TS, String(Date.now()));
-}
+const inputClass = "bg-transparent border-b border-white/10 px-0 py-2 text-[13px] text-white font-mono w-full focus:outline-none focus:border-cobalt transition-colors duration-100 placeholder:opacity-20";
 
-function ghHeaders(): HeadersInit {
-  return { Accept: 'application/vnd.github+json' };
-}
-
-/* ─── helpers ─── */
+/* ─── Shared Industrial Components ─── */
 
 function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-[12px] text-text-faint tracking-widest uppercase">
-        {label}{required && <span className="text-cobalt ml-1">*</span>}
-      </label>
+      <label className="text-[10px] text-text-faint tracking-widest uppercase font-bold">// {label}{required && <span className="text-cobalt ml-1">*</span>}</label>
       {children}
     </div>
   );
@@ -50,1247 +42,564 @@ function Field({ label, required, children }: { label: string; required?: boolea
 
 function CheckField({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
   return (
-    <label className="flex items-center gap-2 cursor-pointer select-none">
-      <input
-        type="checkbox"
-        checked={value}
-        onChange={e => onChange(e.target.checked)}
-        className="accent-cobalt w-3 h-3"
-      />
-      <span className="text-[11px] text-text-muted tracking-widest uppercase">{label}</span>
+    <label className="flex items-center gap-3 cursor-pointer select-none group">
+      <div className={`w-3 h-3 border ${value ? 'bg-cobalt border-cobalt' : 'border-white/20 group-hover:border-white/40'} transition-colors`} />
+      <input type="checkbox" checked={value} onChange={e => onChange(e.target.checked)} className="hidden" />
+      <span className="text-[10px] text-text-muted tracking-widest uppercase group-hover:text-white transition-colors">{label}</span>
     </label>
   );
 }
 
-function StatusMsg({ status }: { status: { type: 'success' | 'error' | 'idle'; msg: string } }) {
-  if (!status.msg) return null;
-  return (
-    <p className={`text-[12px] tracking-widest ${status.type === 'success' ? 'text-cobalt' : 'text-err'}`}>
-      {status.type === 'success' ? '✓ ' : '✗ '}{status.msg}
-    </p>
-  );
-}
-
-const input = "bg-carbono border border-white/20 px-4 py-3 text-[13px] text-white font-mono w-full focus:outline-none focus:border-cobalt transition-colors duration-100";
-
-/* ─── Password gate ─── */
+/* ─── Password Gate ─── */
 
 function PasswordGate({ onAuth }: { onAuth: () => void }) {
-  const [pw, setPw]           = useState('');
-  const [err, setErr]         = useState('');
+  const [pw, setPw] = useState('');
+  const [err, setErr] = useState('');
   const [loading, setLoading] = useState(false);
   const [countdown, setCountdown] = useState(0);
 
-  // Check / update lockout countdown every second
   useEffect(() => {
     const tick = () => {
       const lockUntil = Number(localStorage.getItem(LOCKOUT_KEY) ?? 0);
-      const remaining = Math.max(0, Math.ceil((lockUntil - Date.now()) / 1000));
-      setCountdown(remaining);
+      setCountdown(Math.max(0, Math.ceil((lockUntil - Date.now()) / 1000)));
     };
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
+    tick(); const id = setInterval(tick, 1000); return () => clearInterval(id);
   }, []);
 
-  const locked = countdown > 0;
-
   async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (locked || loading) return;
-
+    e.preventDefault(); if (countdown > 0 || loading) return;
     setLoading(true);
     try {
-      const lockUntil = Number(localStorage.getItem(LOCKOUT_KEY) ?? 0);
-      if (Date.now() < lockUntil) return;
-
-      const hash    = await sha256(pw);
-      const pwHash  = await sha256(ADMIN_PASSWORD ?? '');
-      const correct = hash === pwHash;
-
-      if (correct) {
-        localStorage.removeItem(ATTEMPTS_KEY);
-        localStorage.removeItem(LOCKOUT_KEY);
-        sessionStorage.setItem(SESSION_KEY, 'true');
-        sessionStorage.setItem(SESSION_TS, String(Date.now()));
+      const hash = await sha256(pw);
+      const pwHash = await sha256(ADMIN_PASSWORD ?? '');
+      if (hash === pwHash) {
+        localStorage.removeItem(ATTEMPTS_KEY); localStorage.removeItem(LOCKOUT_KEY);
+        sessionStorage.setItem(SESSION_KEY, 'true'); sessionStorage.setItem(SESSION_TS, String(Date.now()));
         onAuth();
       } else {
         const attempts = Number(localStorage.getItem(ATTEMPTS_KEY) ?? 0) + 1;
         localStorage.setItem(ATTEMPTS_KEY, String(attempts));
-        const remaining = MAX_ATTEMPTS - attempts;
         if (attempts >= MAX_ATTEMPTS) {
-          const until = Date.now() + LOCKOUT_MS;
-          localStorage.setItem(LOCKOUT_KEY, String(until));
+          localStorage.setItem(LOCKOUT_KEY, String(Date.now() + LOCKOUT_MS));
           localStorage.setItem(ATTEMPTS_KEY, '0');
-          setErr(`LOCKOUT — too many attempts. Try again in 5 minutes.`);
-        } else {
-          setErr(`ACCESS_DENIED — ${remaining} attempt${remaining !== 1 ? 's' : ''} remaining.`);
-        }
+          setErr('SYSTEM_LOCKOUT_ENFORCED');
+        } else { setErr(`ACCESS_DENIED: ${MAX_ATTEMPTS - attempts} ATTEMPTS_REMAINING`); }
         setPw('');
       }
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }
 
   const mins = Math.floor(countdown / 60);
   const secs = String(countdown % 60).padStart(2, '0');
 
   return (
-    <div className="min-h-screen bg-carbono flex items-center justify-center px-6" style={{ backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px)', backgroundSize: '24px 24px' }}>
-      <div className="border border-white/10 bg-carbono-surface p-8 w-full max-w-sm flex flex-col gap-5">
-        <div>
-          <p className="text-[12px] text-text-faint tracking-widest mb-2">ALEJANDRO.MP // ADMIN</p>
-          <h1 className="text-2xl font-bold text-white tracking-tight">ENTER_ADMIN_ACCESS</h1>
+    <div className="min-h-screen bg-[#0f1117] flex items-start justify-start p-16 font-mono select-none">
+      <div className="flex flex-col gap-12 w-full max-w-2xl border-l border-white/5 pl-12">
+        <div className="flex flex-col gap-3">
+          <p className="text-[12px] text-cobalt tracking-[0.4em] font-bold uppercase">BUNKER_CONSOLE // AUTHORIZATION_REQUIRED</p>
+          <div className="h-px bg-white/5 w-full" />
         </div>
-        <form onSubmit={submit} className="flex flex-col gap-3">
-          <Field label="Password" required>
-            <input
-              type="password"
-              value={pw}
-              onChange={e => setPw(e.target.value)}
-              className={`${input} ${locked ? 'opacity-40 pointer-events-none' : ''}`}
-              placeholder="••••••••"
-              autoFocus
-              disabled={locked || loading}
-            />
-          </Field>
-          {locked && (
-            <p className="text-[12px] text-err tracking-widest font-mono">
-              ⊘ LOCKED — {mins}:{secs} remaining
-            </p>
+        <form onSubmit={submit} className="flex flex-col gap-12">
+          <div className="flex flex-col gap-4">
+            <label className="text-[11px] text-text-faint tracking-widest uppercase font-bold">// ACCESS_TOKEN_INPUT</label>
+            <div className="flex items-center gap-4">
+              <span className="text-cobalt text-xl font-bold animate-pulse">$</span>
+              <input type="password" value={pw} onChange={e => setPw(e.target.value)} className="bg-transparent border-none p-0 text-white focus:outline-none w-full text-xl tracking-[0.5em]" placeholder="••••••••" autoFocus disabled={countdown > 0 || loading} />
+            </div>
+          </div>
+          {countdown > 0 ? (
+            <div className="p-6 border border-err/30 bg-err/5 text-xs text-err tracking-widest leading-relaxed uppercase font-bold">SYSTEM_LOCKOUT: {mins}:{secs} REMAINING</div>
+          ) : err ? (
+            <p className="text-xs text-err tracking-widest animate-pulse uppercase font-bold">// {err}</p>
+          ) : (
+            <p className="text-[11px] text-text-faint tracking-widest italic opacity-30 uppercase">Ready for manual override...</p>
           )}
-          {!locked && err && (
-            <p className="text-[12px] text-err tracking-widest">{err}</p>
-          )}
-          <button
-            type="submit"
-            disabled={locked || loading}
-            className="bg-cobalt text-white text-xs font-bold tracking-widest uppercase px-6 py-3 hover:bg-cobalt-light disabled:opacity-40 disabled:pointer-events-none transition-colors"
-          >
-            {loading ? 'VERIFYING...' : locked ? `LOCKED (${mins}:${secs})` : 'AUTHENTICATE →'}
-          </button>
+          <button type="submit" disabled={countdown > 0 || loading} className="self-start text-[11px] font-bold tracking-widest uppercase py-4 px-10 border border-white/10 text-white/40 hover:text-cobalt hover:border-cobalt transition-all">{loading ? 'DECRYPTING...' : 'INITIALIZE_ADMIN_BRIDGE \u2192'}</button>
         </form>
       </div>
     </div>
   );
 }
 
-/* ─── Projects tab ─── */
+/* ─── Projects Tab ─── */
 
 const emptyProject = {
-  id: '', name: '', gitUrl: '', photo: '', video: '',
-  stack: '', architecture: '', initSequence: '',
-  specs: '', specsStatus: '', specsStars: '', specsLanguage: '',
-  specsLicense: '', specsDescription: '', specsRepo: '',
-  specsRepoSlug: '', specsDemo: '', specsTags: '',
-  isHighlighted: false, isPrivate: false, isFavorite: false,
-  pushedAt: '', order: 0,
+  id: '', name: '', gitUrl: '', photo: '', video: '', stack: '', architecture: '', initSequence: '', description: '', businessImpact: '',
+  specsStatus: '', specsStars: '', specsLanguage: '', specsLicense: '', specsDescription: '', specsRepo: '', specsRepoSlug: '', specsDemo: '', specsTags: '',
+  isHighlighted: false, isPrivate: false, isFavorite: false, pushedAt: '', order: 0
 };
 
-function ProjectsTab() {
+function ProjectsTab({ onLog }: { onLog: (msg: string) => void }) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [form, setForm] = useState(emptyProject);
   const [editing, setEditing] = useState<string | null>(null);
-  const [status, setStatus] = useState<{ type: 'success' | 'error' | 'idle'; msg: string }>({ type: 'idle', msg: '' });
-  const [loading, setLoading] = useState(false);
-  const [confirm, setConfirm] = useState<string | null>(null);
   const [scanLoading, setScanLoading] = useState(false);
   const [privateMode, setPrivateMode] = useState(false);
   const [manualReadme, setManualReadme] = useState('');
-  const [photoFileName, setPhotoFileName] = useState<string | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
-  function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 1.5 * 1024 * 1024) {
-      setStatus({ type: 'error', msg: 'IMAGEN DEMASIADO GRANDE (máx 1.5MB)' });
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => { setForm(f => ({ ...f, photo: reader.result as string })); setPhotoFileName(file.name); };
-    reader.readAsDataURL(file);
-  }
-
-  function parseReadme(raw: string): { architecture: string; description: string; stack: string[] } {
-    const archMatch = raw.match(/#+\s*(architect\w*|structure|design|overview)[^\n]*\n([\s\S]*?)(?=\n#+\s|\n---|\n___|\n\*\*\*|$)/i);
-    const architecture = archMatch ? archMatch[2].replace(/```[\s\S]*?```/g, '').replace(/[#*`]/g, '').trim().slice(0, 400) : '';
-    const firstPara = raw.replace(/^#[^\n]*\n/, '').match(/([^\n].{20,})/);
-    const description = firstPara ? firstPara[1].replace(/[#*`[\]()]/g, '').trim().slice(0, 200) : '';
-    const techMatches = raw.match(/`([A-Za-z][A-Za-z0-9+#._-]{1,20})`/g) ?? [];
-    const stack = [...new Set(techMatches.map(t => t.replace(/`/g, '').toUpperCase()))].slice(0, 12);
-    return { architecture, description, stack };
-  }
-
-  function applyManualReadme() {
-    if (!manualReadme.trim()) return;
-    const { architecture, description, stack } = parseReadme(manualReadme);
-    setForm(f => ({
-      ...f,
-      architecture: architecture || f.architecture,
-      specsDescription: description || f.specsDescription,
-      stack: stack.length ? stack.join(', ') : f.stack,
-    }));
-    setStatus({ type: 'success', msg: 'README PARSED' });
-  }
-
-  async function fetchGitHub() {
-    const urlMatch = form.gitUrl.trim().match(/github\.com\/([^/]+)\/([^/\s]+)/);
-    if (!urlMatch) { setStatus({ type: 'error', msg: 'INVALID_GITHUB_URL' }); return; }
-    const [, owner, repoName] = urlMatch;
-    const repoSlug = `${owner}/${repoName.replace(/\.git$/, '')}`;
-    setScanLoading(true);
-    setStatus({ type: 'idle', msg: '' });
-    try {
-      const base = `https://api.github.com/repos/${repoSlug}`;
-      const gh = ghHeaders();
-      const topicsH = { ...gh, Accept: 'application/vnd.github.mercy-preview+json' } as HeadersInit;
-      const [repoRes, langsRes, topicsRes, readmeRes] = await Promise.all([
-        fetch(base, { headers: gh }),
-        fetch(`${base}/languages`, { headers: gh }),
-        fetch(`${base}/topics`, { headers: topicsH }),
-        fetch(`${base}/readme`, { headers: gh }),
-      ]);
-      if (repoRes.status === 404) {
-        setPrivateMode(true);
-        setStatus({ type: 'error', msg: 'REPO_PRIVATE — llenalo manual o pegá el README abajo' });
-        setScanLoading(false); return;
-      }
-      if (repoRes.status === 403) {
-        const reset = repoRes.headers.get('x-ratelimit-reset');
-        const waitMin = reset ? Math.ceil((Number(reset) * 1000 - Date.now()) / 60000) : 60;
-        setStatus({ type: 'error', msg: `RATE_LIMIT — esperá ${waitMin}min` });
-        setScanLoading(false); return;
-      }
-      if (!repoRes.ok) throw new Error(`GitHub ${repoRes.status}`);
-      const r = await repoRes.json();
-      const langs: Record<string, number> = langsRes.ok ? await langsRes.json() : {};
-      const topics: { names: string[] } = topicsRes.ok ? await topicsRes.json() : { names: [] };
-      const allLangs = Object.keys(langs);
-      let architecture = '';
-      if (readmeRes.ok) {
-        const readmeData = await readmeRes.json();
-        const raw = atob(readmeData.content?.replace(/\n/g, '') ?? '');
-        architecture = parseReadme(raw).architecture;
-      }
-      const autoName = r.name?.toUpperCase().replace(/-/g, '_') ?? '';
-      setForm(f => ({
-        ...f,
-        id: f.id || autoName.slice(0, 20),
-        name: autoName || f.name,
-        photo: f.photo || `https://opengraph.githubassets.com/1/${repoSlug}`,
-        specsDescription: r.description ?? f.specsDescription,
-        specsLanguage: r.language ?? allLangs[0] ?? f.specsLanguage,
-        specsLicense: r.license?.spdx_id ?? f.specsLicense,
-        specsStars: String(r.stargazers_count ?? ''),
-        specsRepo: r.html_url ?? f.specsRepo,
-        specsRepoSlug: repoSlug,
-        specsDemo: r.homepage || f.specsDemo,
-        specsTags: topics.names?.join(', ') || f.specsTags,
-        stack: allLangs.map((l: string) => l.toUpperCase()).join(', '),
-        architecture: architecture || f.architecture,
-        specsStatus: r.archived ? 'ARCHIVED' : 'PROD',
-        pushedAt: r.pushed_at ?? f.pushedAt,
-      }));
-      setPrivateMode(false);
-      setStatus({ type: 'success', msg: `SCANNED: ${repoSlug} — ${allLangs.length} langs` });
-    } catch (e: unknown) {
-      setStatus({ type: 'error', msg: e instanceof Error ? e.message : 'SCAN_FAILED' });
-    } finally { setScanLoading(false); }
-  }
-
-  const load = useCallback(async () => {
-    try {
-      const stored = localStorage.getItem('portfolioProjects');
-      if (stored) { setProjects(JSON.parse(stored)); return; }
-      const res = await fetch('/data/projects.json');
-      if (res.ok) {
-        const content = await res.json();
-        setProjects(content);
-        localStorage.setItem('portfolioProjects', JSON.stringify(content));
-      }
-    } catch {}
+  const load = useCallback(() => {
+    const stored = localStorage.getItem('portfolioProjects');
+    if (stored) setProjects(JSON.parse(stored));
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
+  function parseReadme(raw: string) {
+    const archMatch = raw.match(/#+\s*(architect\w*|structure|design|overview)[^\n]*\n([\s\S]*?)(?=\n#+\s|\n---|\n___|\n\*\*\*|$)/i);
+    const architecture = archMatch ? archMatch[2].replace(/```[\s\S]*?```/g, '').replace(/[#*`]/g, '').trim().slice(0, 400) : '';
+    const techMatches = raw.match(/`([A-Za-z][A-Za-z0-9+#._-]{1,20})`/g) ?? [];
+    const stack = [...new Set(techMatches.map(t => t.replace(/`/g, '').toUpperCase()))].slice(0, 12);
+    return { architecture, stack };
+  }
+
+  async function fetchGitHub() {
+    const urlMatch = form.gitUrl.trim().match(/github\.com\/([^/]+)\/([^/\s]+)/);
+    if (!urlMatch) { onLog('ERROR: INVALID_URL'); return; }
+    const repoSlug = `${urlMatch[1]}/${urlMatch[2].replace(/\.git$/, '')}`;
+    setScanLoading(true); onLog(`SCANNING_REPO: ${repoSlug}...`);
+    try {
+      const gh = { Accept: 'application/vnd.github+json' };
+      const [repoRes, langsRes, readmeRes] = await Promise.all([
+        fetch(`https://api.github.com/repos/${repoSlug}`, { headers: gh }),
+        fetch(`https://api.github.com/repos/${repoSlug}/languages`, { headers: gh }),
+        fetch(`https://api.github.com/repos/${repoSlug}/readme`, { headers: gh }),
+      ]);
+      if (!repoRes.ok) throw new Error(`GH_${repoRes.status}`);
+      const r = await repoRes.json();
+      const langs = langsRes.ok ? await langsRes.json() : {};
+      let architecture = '';
+      if (readmeRes.ok) {
+        const readmeData = await readmeRes.json();
+        architecture = parseReadme(atob(readmeData.content.replace(/\n/g, ''))).architecture;
+      }
+      setForm(f => ({
+        ...f,
+        id: f.id || r.name.toUpperCase().replace(/-/g, '_'),
+        name: r.name.toUpperCase().replace(/-/g, '_'),
+        photo: f.photo || `https://opengraph.githubassets.com/1/${repoSlug}`,
+        specsDescription: r.description,
+        specsLanguage: r.language,
+        specsStars: String(r.stargazers_count),
+        specsRepo: r.html_url,
+        specsRepoSlug: repoSlug,
+        specsStatus: 'PROD',
+        pushedAt: r.pushed_at,
+        stack: Object.keys(langs).join(', ').toUpperCase()
+      }));
+      onLog(`SYNC_SUCCESS: ${repoSlug}`);
+    } catch (e: any) { onLog(`SYNC_FAILED: ${e.message}`); setPrivateMode(true); }
+    finally { setScanLoading(false); }
+  }
+
+  function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => { setForm(f => ({ ...f, photo: reader.result as string })); onLog(`IMAGE_BUFFERED: ${file.name}`); };
+    reader.readAsDataURL(file);
+  }
+
+  function save() {
+    if (!form.name.trim()) { onLog('ERROR: NAME_REQUIRED'); return; }
+    const specs: any = { status: form.specsStatus, stars: form.specsStars, language: form.specsLanguage, license: form.specsLicense, description: form.specsDescription, repo: form.specsRepo, repoSlug: form.specsRepoSlug, demo: form.specsDemo, tags: form.specsTags.split(',').filter(Boolean), video: form.video };
+    const p: Project = { id: form.id || String(Date.now()), name: form.name.toUpperCase(), photo: form.photo, stack: form.stack.split(',').map(s => s.trim().toUpperCase()).filter(Boolean), architecture: form.architecture, initSequence: form.initSequence, description: form.description, businessImpact: form.businessImpact, specs, isHighlighted: form.isHighlighted, isFavorite: form.isFavorite, isPrivate: form.isPrivate, pushedAt: form.pushedAt || undefined, order: Number(form.order) || 0 };
+    const next = editing ? projects.map(x => x.id === editing ? p : x) : [...projects, p];
+    localStorage.setItem('portfolioProjects', JSON.stringify(next));
+    setProjects(next); onLog(`MODULE_COMMITTED: ${p.name}`); setEditing(p.id);
+  }
+
   function select(p: Project) {
-    setEditing(p.id);
-    setForm({
-      id: p.id, name: p.name,
-      gitUrl: (p.specs?.repo as string) ?? '',
-      photo: p.photo, video: (p.specs?.video as string) ?? '',
-      stack: p.stack.join(', '), architecture: p.architecture,
-      initSequence: p.initSequence,
-      specsStatus: (p.specs?.status as string) ?? '',
-      specsStars: (p.specs?.stars as string) ?? '',
-      specsLanguage: (p.specs?.language as string) ?? '',
-      specsLicense: (p.specs?.license as string) ?? '',
-      specsDescription: (p.specs?.description as string) ?? '',
-      specsRepo: (p.specs?.repo as string) ?? '',
-      specsRepoSlug: (p.specs?.repoSlug as string) ?? '',
-      specsDemo: (p.specs?.demo as string) ?? '',
-      specsTags: Array.isArray(p.specs?.tags) ? (p.specs?.tags as string[]).join(', ') : '',
-      specs: '',
-      isHighlighted: p.isHighlighted ?? false,
-      isPrivate: p.isPrivate ?? false,
-      isFavorite: p.isFavorite ?? false,
-      pushedAt: p.pushedAt ?? '',
-      order: p.order ?? 0,
-    });
-    setStatus({ type: 'idle', msg: '' });
-  }
-
-  function clear() { setEditing(null); setForm(emptyProject); setStatus({ type: 'idle', msg: '' }); }
-
-  function parse(): Project | null {
-    if (!form.name.trim()) { setStatus({ type: 'error', msg: 'TITLE_REQUIRED' }); return null; }
-    const specs: Record<string, string | string[]> = {};
-    if (form.specsStatus?.trim()) specs.status = form.specsStatus.trim();
-    if (form.specsStars?.trim()) specs.stars = form.specsStars.trim();
-    if (form.specsLanguage?.trim()) specs.language = form.specsLanguage.trim();
-    if (form.specsLicense?.trim()) specs.license = form.specsLicense.trim();
-    if (form.specsDescription?.trim()) specs.description = form.specsDescription.trim();
-    if (form.specsRepo?.trim()) specs.repo = form.specsRepo.trim();
-    if (form.specsRepoSlug?.trim()) specs.repoSlug = form.specsRepoSlug.trim();
-    if (form.specsDemo?.trim()) specs.demo = form.specsDemo.trim();
-    if (form.specsTags?.trim()) specs.tags = form.specsTags.split(',').map(t => t.trim()).filter(Boolean);
-    if (form.video?.trim()) specs.video = form.video.trim();
-    if (!specs.repo && form.gitUrl.trim()) {
-      specs.repo = form.gitUrl.trim();
-      const urlMatch = form.gitUrl.trim().match(/github\.com\/([^\/]+)\/([^\/]+)/);
-      if (urlMatch && !specs.repoSlug) specs.repoSlug = `${urlMatch[1]}/${urlMatch[2]}`;
-    }
-    return {
-      id: form.id || String(Date.now()),
-      name: form.name.trim().toUpperCase(),
-      photo: form.photo.trim(),
-      stack: form.stack.split(',').map(s => s.trim().toUpperCase()).filter(Boolean),
-      architecture: form.architecture.trim(),
-      initSequence: form.initSequence.trim(),
-      specs,
-      isHighlighted: form.isHighlighted,
-      isPrivate: form.isPrivate,
-      isFavorite: form.isFavorite,
-      pushedAt: form.pushedAt || undefined,
-      order: Number(form.order) || 0,
-    };
-  }
-
-  async function save() {
-    const p = parse(); if (!p) return;
-    setLoading(true);
-    try {
-      const updated = editing ? projects.map(x => x.id === editing ? p : x) : [...projects, p];
-      setProjects(updated);
-      localStorage.setItem('portfolioProjects', JSON.stringify(updated));
-      sessionStorage.setItem('lastDataUpdate', Date.now().toString());
-      setStatus({ type: 'success', msg: editing ? 'PROJECT_UPDATED' : 'PROJECT_CREATED' });
-      logActivity('INFO', editing ? `PROJECT_UPDATED ${p.id}` : `PROJECT_ADDED ${p.id} — ${p.name}`);
-      clear(); await load();
-    } catch (e: unknown) {
-      setStatus({ type: 'error', msg: e instanceof Error ? e.message : 'SAVE_FAILED' });
-    } finally { setLoading(false); }
-  }
-
-  async function del(id: string) {
-    setLoading(true);
-    try {
-      const updated = projects.filter(p => p.id !== id);
-      setProjects(updated);
-      localStorage.setItem('portfolioProjects', JSON.stringify(updated));
-      sessionStorage.setItem('lastDataUpdate', Date.now().toString());
-      setStatus({ type: 'success', msg: 'PROJECT_DELETED' });
-      logActivity('WARN', `PROJECT_REMOVED ${id}`);
-      setConfirm(null); clear(); await load();
-    } catch (e: unknown) {
-      setStatus({ type: 'error', msg: e instanceof Error ? e.message : 'DELETE_FAILED' });
-    } finally { setLoading(false); }
+    setEditing(p.id); onLog(`SELECT: ${p.id}`);
+    setForm({ ...emptyProject, id: p.id, name: p.name, photo: p.photo, video: (p.specs?.video as string) || '', stack: p.stack.join(', '), architecture: p.architecture, initSequence: p.initSequence, description: p.description ?? '', businessImpact: p.businessImpact ?? '', specsStatus: (p.specs?.status as string) || '', specsStars: (p.specs?.stars as string) || '', specsLanguage: (p.specs?.language as string) || '', specsLicense: (p.specs?.license as string) || '', specsDescription: (p.specs?.description as string) || '', specsRepo: (p.specs?.repo as string) || '', specsRepoSlug: (p.specs?.repoSlug as string) || '', specsDemo: (p.specs?.demo as string) || '', specsTags: Array.isArray(p.specs?.tags) ? p.specs.tags.join(', ') : '', isHighlighted: !!p.isHighlighted, isFavorite: !!p.isFavorite, isPrivate: !!p.isPrivate, pushedAt: p.pushedAt || '', order: p.order || 0 });
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-5">
-      {/* List */}
-      <div className="flex flex-col gap-2">
-        <div className="flex justify-between items-center">
-          <p className="text-[12px] text-text-faint tracking-widest uppercase">Projects ({projects.length})</p>
-          <button onClick={clear} className="text-[12px] text-cobalt tracking-widest hover:text-cobalt-light">+ NEW</button>
-        </div>
-        {projects.map(p => (
-          <button key={p.id} onClick={() => select(p)} className={`text-left border px-3 py-2 text-xs transition-colors relative ${editing === p.id ? 'border-cobalt bg-cobalt/5 text-white' : 'border-white/10 bg-carbono-surface text-text-muted hover:border-white/20 hover:text-white'}`}>
-            <div className="flex items-center gap-1">
-              {p.isFavorite && <span className="text-bronze text-[8px]">★</span>}
-              {p.isHighlighted && <span className="text-bronze text-[8px]">◈</span>}
-              {p.isPrivate && <span className="text-err/60 text-[8px]">🔒</span>}
-              <span className="text-text-faint text-[11px]">{p.id}</span>
+    <div className="flex flex-col gap-12">
+      <div className="flex flex-col gap-6">
+        <header className="flex justify-between items-center border-b border-white/5 pb-3">
+          <p className="text-[11px] text-cobalt tracking-widest font-bold uppercase">// MODULE_REPOSITORY</p>
+          <button onClick={() => { setEditing(null); setForm(emptyProject); onLog('MODE: INITIALIZE'); }} className="text-[10px] text-white/40 hover:text-white tracking-widest">[+] NEW_MODULE</button>
+        </header>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {projects.map(p => (
+            <div key={p.id} onClick={() => select(p)} className={`p-5 border transition-all cursor-pointer ${editing === p.id ? 'border-cobalt bg-cobalt/5' : 'border-white/5 hover:border-white/20 bg-white/[0.01]'}`}>
+              <p className="text-[11px] font-bold text-white mb-1 uppercase truncate">{p.name}</p>
+              <div className="flex justify-between items-center opacity-30">
+                <p className="text-[9px] text-text-faint tracking-widest uppercase">{p.id}</p>
+                {p.isFavorite && <span className="text-bronze text-[10px]">★</span>}
+              </div>
             </div>
-            <span className="text-[11px]">{p.name}</span>
-          </button>
-        ))}
-        {projects.length === 0 && <p className="text-[12px] text-text-faint tracking-widest px-2">NO_PROJECTS</p>}
+          ))}
+        </div>
       </div>
 
-      {/* Form */}
-      <div className="border border-white/10 bg-carbono-surface p-4 flex flex-col gap-3">
-        <div className="flex justify-between items-center border-b border-white/10 pb-3">
-          <p className="text-xs font-bold text-white tracking-widest">{editing ? `EDIT: ${form.name || editing}` : 'CREATE_PROJECT'}</p>
-          {editing && <button onClick={clear} className="text-[12px] text-text-faint hover:text-white">CANCEL</button>}
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="ID" required><input value={form.id} onChange={e => setForm(f => ({ ...f, id: e.target.value }))} className={input} placeholder="01_MY_PROJECT" /></Field>
-          <Field label="Name" required><input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className={input} placeholder="MY_PROJECT" /></Field>
-        </div>
-
-        <Field label="Git URL">
-          <div className="flex gap-2">
-            <input value={form.gitUrl} onChange={e => { setForm(f => ({ ...f, gitUrl: e.target.value })); setPrivateMode(false); }} className={`${input} flex-1`} placeholder="https://github.com/user/repo" />
-            <button type="button" onClick={fetchGitHub} disabled={scanLoading || !form.gitUrl.includes('github.com')} className="bg-cobalt/20 border border-cobalt/40 text-cobalt text-[11px] font-bold tracking-widest uppercase px-3 hover:bg-cobalt/30 disabled:opacity-30 transition-colors flex-shrink-0">
-              {scanLoading ? '...' : 'SCAN'}
-            </button>
-            <button type="button" onClick={() => setPrivateMode(p => !p)} className={`border text-[11px] font-bold tracking-widest uppercase px-3 transition-colors flex-shrink-0 ${privateMode ? 'border-warn/60 text-warn bg-warn/10' : 'border-white/20 text-text-faint hover:text-white'}`}>PRIV</button>
+      <div className="bg-white/[0.01] border border-white/5 p-12 relative">
+        <div className="absolute top-0 left-0 w-1.5 h-full bg-cobalt/20" />
+        <p className="text-[12px] text-white tracking-[0.3em] font-bold uppercase mb-10">// {editing ? `TERMINAL_CONFIG: ${editing}` : 'INITIALIZING_DATA'}</p>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-20 gap-y-10">
+          <Field label="ID" required><input value={form.id} onChange={e => setForm(f => ({ ...f, id: e.target.value }))} className={inputClass} placeholder="01_CORE" /></Field>
+          <Field label="NAME" required><input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className={inputClass} placeholder="SYSTEM_MODULE" /></Field>
+          
+          <div className="col-span-2 flex gap-6">
+            <div className="flex-1"><Field label="GITHUB_ENDPOINT"><input value={form.gitUrl} onChange={e => setForm(f => ({ ...f, gitUrl: e.target.value }))} className={inputClass} placeholder="https://github.com/..." /></Field></div>
+            <button onClick={fetchGitHub} disabled={scanLoading} className="self-end px-8 py-3 border border-cobalt/40 text-cobalt text-[11px] font-bold tracking-widest hover:bg-cobalt/10 uppercase transition-all">{scanLoading ? 'SCANNING...' : 'SYNC_METADATA'}</button>
           </div>
-        </Field>
 
-        {privateMode && (
-          <div className="border border-warn/20 bg-warn/5 p-3 flex flex-col gap-2">
-            <p className="text-[11px] text-warn tracking-widest uppercase">MODO MANUAL — pegá el README acá</p>
-            <textarea value={manualReadme} onChange={e => setManualReadme(e.target.value)} className={`${input} h-28 resize-none text-[11px]`} placeholder="Pegá el README.md acá..." />
-            <button type="button" onClick={applyManualReadme} disabled={!manualReadme.trim()} className="self-start bg-warn/20 border border-warn/40 text-warn text-[11px] font-bold tracking-widest uppercase px-4 py-1.5 hover:bg-warn/30 disabled:opacity-30 transition-colors">PARSE README →</button>
-          </div>
-        )}
-
-        {/* Visual flags */}
-        <div className="border border-white/10 bg-carbono p-3 flex flex-col gap-2">
-          <p className="text-[10px] text-text-faint tracking-widest uppercase mb-1">VISUAL FLAGS</p>
-          <div className="flex flex-wrap gap-5">
-            <CheckField label="Highlighted (Oro/Bronce)" value={form.isHighlighted} onChange={v => setForm(f => ({ ...f, isHighlighted: v }))} />
-            <CheckField label="Private (Redacted)" value={form.isPrivate} onChange={v => setForm(f => ({ ...f, isPrivate: v }))} />
-            <CheckField label="Favorito (Pinned)" value={form.isFavorite} onChange={v => setForm(f => ({ ...f, isFavorite: v }))} />
-          </div>
-          <div className="grid grid-cols-2 gap-3 mt-1">
-            <Field label="Pushed At (ISO)">
-              <input value={form.pushedAt} onChange={e => setForm(f => ({ ...f, pushedAt: e.target.value }))} className={input} placeholder="2026-01-15T10:30:00Z" />
-            </Field>
-            <Field label="Order (favoritos)">
-              <input type="number" value={form.order} onChange={e => setForm(f => ({ ...f, order: Number(e.target.value) }))} className={input} placeholder="0" />
-            </Field>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Foto">
-            <div className="flex gap-1">
-              <input value={form.photo.startsWith('data:') ? (photoFileName ?? '[imagen subida]') : form.photo} onChange={e => { setForm(f => ({ ...f, photo: e.target.value })); setPhotoFileName(null); }} className={`${input} flex-1`} placeholder="URL o subí archivo →" />
-              {form.specsRepoSlug && (
-                <button type="button" onClick={() => { setForm(f => ({ ...f, photo: `https://opengraph.githubassets.com/1/${f.specsRepoSlug}` })); setPhotoFileName(null); }} className="border border-cobalt/40 text-cobalt text-[10px] font-bold tracking-widest uppercase px-2 hover:bg-cobalt/20 transition-colors flex-shrink-0">GH</button>
-              )}
-              <button type="button" onClick={() => photoInputRef.current?.click()} className="border border-white/20 text-text-faint text-[10px] font-bold tracking-widest uppercase px-2 hover:text-white hover:border-white/40 transition-colors flex-shrink-0">↑</button>
-              <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
+          {privateMode && (
+            <div className="col-span-2 border border-warn/30 bg-warn/5 p-6 space-y-4">
+              <p className="text-[10px] text-warn tracking-widest font-bold uppercase">// MANUAL_PARSING_MODE</p>
+              <textarea value={manualReadme} onChange={e => setManualReadme(e.target.value)} className={`${inputClass} h-32 border-white/5 bg-black/20 p-4`} placeholder="Paste README.md here for manual metadata extraction..." />
+              <button onClick={() => { const { architecture, stack } = parseReadme(manualReadme); setForm(f => ({ ...f, architecture, stack: stack.join(', ') })); onLog('README_PARSED'); }} className="px-6 py-2 border border-warn/40 text-warn text-[10px] font-bold tracking-widest hover:bg-warn/10 uppercase transition-all">EXEC_PARSE_BUFFER</button>
             </div>
-            {form.photo && (
-              <img src={form.photo} alt="preview" className="mt-1 h-16 w-full object-cover border border-white/10 opacity-70" onError={e => (e.currentTarget.style.display = 'none')} />
-            )}
-          </Field>
-          <Field label="Stack (CSV)"><input value={form.stack} onChange={e => setForm(f => ({ ...f, stack: e.target.value }))} className={input} placeholder="GO, REACT, DOCKER" /></Field>
-        </div>
+          )}
 
-        <Field label="Video"><input value={form.video || ''} onChange={e => setForm(f => ({ ...f, video: e.target.value }))} className={input} placeholder="YouTube, Vimeo, o /projects/demo.mp4" /></Field>
-        <Field label="Architecture"><textarea value={form.architecture} onChange={e => setForm(f => ({ ...f, architecture: e.target.value }))} className={`${input} h-16 resize-none`} /></Field>
-        <Field label="Init Sequence"><textarea value={form.initSequence} onChange={e => setForm(f => ({ ...f, initSequence: e.target.value }))} className={`${input} h-14 resize-none`} /></Field>
+          <div className="col-span-2 bg-[#080808] border border-white/5 p-6 flex flex-wrap gap-12">
+            <CheckField label="HIGH_VALUE (ORO)" value={form.isHighlighted} onChange={v => setForm(f => ({ ...f, isHighlighted: v }))} />
+            <CheckField label="PINNED (FAVORITO)" value={form.isFavorite} onChange={v => setForm(f => ({ ...f, isFavorite: v }))} />
+            <CheckField label="REDACTED (PRIVADO)" value={form.isPrivate} onChange={v => setForm(f => ({ ...f, isPrivate: v }))} />
+          </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Status">
-            <select value={form.specsStatus || ''} onChange={e => setForm(f => ({ ...f, specsStatus: e.target.value }))} className={input}>
-              <option value="">— sin estado —</option>
-              <option value="IN_PROGRESS">IN PROGRESS</option>
+          <Field label="OVERVIEW_BRIEF"><input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} className={inputClass} /></Field>
+          <Field label="BUSINESS_IMPACT"><input value={form.businessImpact} onChange={e => setForm(f => ({ ...f, businessImpact: e.target.value }))} className={inputClass} /></Field>
+          
+          <div className="col-span-2 grid grid-cols-2 gap-10 border-t border-white/5 pt-10">
+            <div className="space-y-4">
+              <Field label="VISUAL_ASSET [IMG]">
+                <div className="flex gap-2">
+                  <input value={form.photo} onChange={e => setForm(f => ({ ...f, photo: e.target.value }))} className={`${inputClass} flex-1`} />
+                  <button onClick={() => photoInputRef.current?.click()} className="px-4 py-1 border border-white/10 text-white/40 text-[10px] hover:text-white uppercase transition-all">↑</button>
+                  <input ref={photoInputRef} type="file" className="hidden" onChange={handlePhotoUpload} />
+                </div>
+              </Field>
+              {form.photo && <div className="border border-white/10 p-2 bg-[#080808]"><img src={form.photo} className="h-32 w-full object-cover opacity-60" /></div>}
+            </div>
+            <div className="space-y-4">
+              <Field label="STREAM_SOURCE [VIDEO]"><input value={form.video} onChange={e => setForm(f => ({ ...f, video: e.target.value }))} className={inputClass} /></Field>
+              {form.video && <div className="border border-white/10 p-2 bg-[#080808] h-32 flex items-center justify-center"><p className="text-[9px] text-cobalt tracking-widest font-bold uppercase animate-pulse">● SIGNAL_ESTABLISHED</p></div>}
+            </div>
+          </div>
+
+          <div className="col-span-2"><Field label="SYSTEM_ARCHITECTURE"><textarea value={form.architecture} onChange={e => setForm(f => ({ ...f, architecture: e.target.value }))} className={`${inputClass} h-24 resize-none`} /></Field></div>
+          <div className="col-span-2"><Field label="INIT_SEQUENCE"><textarea value={form.initSequence} onChange={e => setForm(f => ({ ...f, initSequence: e.target.value }))} className={`${inputClass} h-16 resize-none`} /></Field></div>
+
+          <Field label="TECH_STACK (CSV)"><input value={form.stack} onChange={e => setForm(f => ({ ...f, stack: e.target.value }))} className={inputClass} /></Field>
+          <Field label="STATUS">
+            <select value={form.specsStatus} onChange={e => setForm(f => ({ ...f, specsStatus: e.target.value }))} className={inputClass}>
+              <option value="">— SELECT_STATUS —</option>
+              <option value="IN_PROGRESS">IN_PROGRESS</option>
               <option value="COMPLETED">COMPLETED</option>
               <option value="PAUSED">PAUSED</option>
               <option value="ARCHIVED">ARCHIVED</option>
             </select>
           </Field>
-          <Field label="Stars"><input value={form.specsStars || ''} onChange={e => setForm(f => ({ ...f, specsStars: e.target.value }))} className={input} placeholder="11" /></Field>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Language"><input value={form.specsLanguage || ''} onChange={e => setForm(f => ({ ...f, specsLanguage: e.target.value }))} className={input} placeholder="Go" /></Field>
-          <Field label="License"><input value={form.specsLicense || ''} onChange={e => setForm(f => ({ ...f, specsLicense: e.target.value }))} className={input} placeholder="MIT" /></Field>
-        </div>
-        <Field label="Description"><input value={form.specsDescription || ''} onChange={e => setForm(f => ({ ...f, specsDescription: e.target.value }))} className={input} /></Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Repo URL"><input value={form.specsRepo || ''} onChange={e => setForm(f => ({ ...f, specsRepo: e.target.value }))} className={input} /></Field>
-          <Field label="Repo Slug"><input value={form.specsRepoSlug || ''} onChange={e => setForm(f => ({ ...f, specsRepoSlug: e.target.value }))} className={input} placeholder="user/repo" /></Field>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Demo URL"><input value={form.specsDemo || ''} onChange={e => setForm(f => ({ ...f, specsDemo: e.target.value }))} className={input} /></Field>
-          <Field label="Tags (CSV)"><input value={form.specsTags || ''} onChange={e => setForm(f => ({ ...f, specsTags: e.target.value }))} className={input} /></Field>
+          <Field label="STARS"><input value={form.specsStars} onChange={e => setForm(f => ({ ...f, specsStars: e.target.value }))} className={inputClass} /></Field>
+          <Field label="LANGUAGE"><input value={form.specsLanguage} onChange={e => setForm(f => ({ ...f, specsLanguage: e.target.value }))} className={inputClass} /></Field>
+          <Field label="LICENSE"><input value={form.specsLicense} onChange={e => setForm(f => ({ ...f, specsLicense: e.target.value }))} className={inputClass} /></Field>
+          <Field label="REPO_SLUG"><input value={form.specsRepoSlug} onChange={e => setForm(f => ({ ...f, specsRepoSlug: e.target.value }))} className={inputClass} /></Field>
         </div>
 
-        <StatusMsg status={status} />
-        <div className="flex gap-2">
-          <button onClick={save} disabled={loading} className="flex-1 bg-cobalt text-white text-[12px] font-bold tracking-widest uppercase py-3 hover:bg-cobalt-light disabled:opacity-40 transition-colors">
-            {loading ? 'PROCESANDO...' : editing ? 'ACTUALIZAR PROYECTO' : 'CREAR PROYECTO'}
-          </button>
-          {editing && <button onClick={() => setConfirm(editing)} className="border border-err/40 text-err text-[12px] font-bold tracking-widest uppercase px-4 hover:bg-err/5 transition-colors">ELIMINAR</button>}
+        <div className="mt-12 flex items-center gap-10">
+          <button onClick={save} className="bg-cobalt text-white text-[11px] font-bold tracking-[0.3em] uppercase px-12 py-5 hover:bg-cobalt-light transition-all shadow-[0_0_30px_rgba(0,85,255,0.2)]">COMMIT_CHANGES [CTRL+S]</button>
+          {editing && <button onClick={() => { if(confirm('DECOMMISSION?')) { const n = projects.filter(x => x.id !== editing); localStorage.setItem('portfolioProjects', JSON.stringify(n)); load(); setEditing(null); onLog(`REMOVED: ${editing}`); } }} className="text-[10px] text-err/50 hover:text-err tracking-widest uppercase">DECOMMISSION</button>}
         </div>
       </div>
+    </div>
+  );
+}
 
-      {confirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-          <div className="border border-err/30 bg-carbono-surface p-6 max-w-sm w-full mx-4 flex flex-col gap-4">
-            <p className="text-sm font-bold text-white">CONFIRM_DELETE</p>
-            <p className="text-xs text-text-muted">Project <span className="text-err">{confirm}</span> will be permanently removed.</p>
-            <div className="flex gap-2">
-              <button onClick={() => del(confirm)} disabled={loading} className="flex-1 bg-err text-white text-xs font-bold tracking-widest uppercase py-2.5">{loading ? 'DELETING...' : 'CONFIRM'}</button>
-              <button onClick={() => setConfirm(null)} className="flex-1 border border-white/20 text-white text-xs font-bold tracking-widest uppercase py-2.5">CANCEL</button>
+/* ─── Tech Tab ─── */
+
+function TechTab({ onLog }: { onLog: (msg: string) => void }) {
+  const [tools, setTools] = useState<TechTool[]>([]);
+  const [editing, setEditing] = useState<number | null>(null);
+  const [form, setForm] = useState({ name: '', version: '', usageLevel: 80 });
+  const [loading, setLoading] = useState(false);
+
+  const load = useCallback(() => { const s = localStorage.getItem('portfolioTechstack'); if (s) setTools(JSON.parse(s)); }, []);
+  useEffect(() => { load(); }, [load]);
+
+  async function scanAll() {
+    const s = localStorage.getItem('portfolioProjects'); if (!s) return;
+    const projects = JSON.parse(s) as Project[];
+    const slugs = projects.map(p => p.specs?.repoSlug as string).filter(Boolean);
+    setLoading(true); onLog(`SCANNING_${slugs.length}_REPOS...`);
+    try {
+      const results = await Promise.all(slugs.map(slug => fetch(`https://api.github.com/repos/${slug}/languages`, { headers: { Accept: 'application/vnd.github+json' } }).then(r => r.ok ? r.json() : {})));
+      const totals: Record<string, number> = {};
+      for (const langs of results) { for (const [l, v] of Object.entries(langs as any)) totals[l] = (totals[l] || 0) + (v as number); }
+      const sorted = Object.entries(totals).sort((a, b) => b[1] - a[1]);
+      const max = sorted[0]?.[1] || 1;
+      const derived = sorted.map(([n, v]) => ({ name: n.toUpperCase(), version: '', usageLevel: Math.round((v/max) * 100) }));
+      setTools(derived); localStorage.setItem('portfolioTechstack', JSON.stringify(derived));
+      onLog(`SCAN_COMPLETE: ${sorted.length} MODULES DETECTED`);
+    } catch (e: any) { onLog(`SCAN_ERROR: ${e.message}`); }
+    finally { setLoading(false); }
+  }
+
+  function save() {
+    if (!form.name) return;
+    const tool = { ...form, name: form.name.toUpperCase() };
+    const next = editing !== null ? tools.map((t, i) => i === editing ? tool : t) : [...tools, tool];
+    setTools(next); localStorage.setItem('portfolioTechstack', JSON.stringify(next));
+    setForm({ name: '', version: '', usageLevel: 80 }); setEditing(null); onLog(`TECH_SAVED: ${tool.name}`);
+  }
+
+  return (
+    <div className="flex flex-col gap-10">
+      <header className="flex justify-between items-center border-b border-white/5 pb-3">
+        <p className="text-[11px] text-cobalt tracking-widest font-bold uppercase">// TECH_MATRIX_REGISTRY</p>
+        <button onClick={scanAll} disabled={loading} className="text-[10px] text-cobalt hover:underline uppercase transition-all tracking-widest">{loading ? 'SCANNING_GITHUB...' : '[REFRESH_FROM_GITHUB]'}</button>
+      </header>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {tools.map((t, i) => (
+          <div key={t.name} onClick={() => { setEditing(i); setForm(t); }} className={`p-6 border transition-all cursor-pointer ${editing === i ? 'border-cobalt bg-cobalt/5' : 'border-white/5 bg-white/[0.01] hover:border-white/20'}`}>
+            <div className="flex justify-between items-center mb-4">
+              <p className="text-[12px] font-bold text-white uppercase">{t.name}</p>
+              <span className="text-[11px] text-cobalt font-bold">{t.usageLevel}%</span>
+            </div>
+            <div className="h-1 bg-white/5 w-full"><div className="h-full bg-cobalt transition-all" style={{ width: `${t.usageLevel}%` }} /></div>
+          </div>
+        ))}
+      </div>
+      <div className="bg-white/[0.01] border border-white/5 p-10 space-y-8">
+        <p className="text-[11px] text-white tracking-widest font-bold uppercase">// {editing !== null ? 'UPDATE_TOOL' : 'ADD_NEW_TOOL'}</p>
+        <div className="grid grid-cols-3 gap-8">
+          <Field label="NAME"><input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className={inputClass} /></Field>
+          <Field label="VERSION"><input value={form.version} onChange={e => setForm(f => ({ ...f, version: e.target.value }))} className={inputClass} /></Field>
+          <Field label="USAGE_%"><input type="number" value={form.usageLevel} onChange={e => setForm(f => ({ ...f, usageLevel: Number(e.target.value) }))} className={inputClass} /></Field>
+        </div>
+        <div className="flex gap-4"><button onClick={save} className="px-8 py-3 bg-cobalt text-white text-[10px] font-bold uppercase tracking-widest">SAVE_TOOL</button>
+        {editing !== null && <button onClick={() => { setTools(tools.filter((_, i) => i !== editing)); setEditing(null); setForm({ name: '', version: '', usageLevel: 80 }); }} className="text-err text-[10px] font-bold uppercase tracking-widest ml-auto">DELETE</button>}</div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Ambitions Tab ─── */
+
+function AmbitionsTab({ onLog }: { onLog: (msg: string) => void }) {
+  const [items, setItems] = useState<Ambition[]>([]);
+  const [form, setForm] = useState({ text: '', section: 'short' as any });
+  const [editing, setEditing] = useState<string | null>(null);
+
+  const load = useCallback(() => { const s = localStorage.getItem('portfolioAmbitions'); if (s) setItems(JSON.parse(s)); }, []);
+  useEffect(() => { load(); }, [load]);
+
+  function save() {
+    if (!form.text) return;
+    const item = { id: editing || `${form.section}-${Date.now()}`, text: form.text, section: form.section, completed: false };
+    const next = editing ? items.map(i => i.id === editing ? item : i) : [...items, item];
+    setItems(next); localStorage.setItem('portfolioAmbitions', JSON.stringify(next));
+    setForm({ text: '', section: 'short' }); setEditing(null); onLog('ROADMAP_UPDATED');
+  }
+
+  return (
+    <div className="flex flex-col gap-10">
+      <header className="border-b border-white/5 pb-3"><p className="text-[11px] text-cobalt tracking-widest font-bold uppercase">// STRATEGIC_ROADMAP</p></header>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {['short', 'mid', 'long'].map(sec => (
+          <div key={sec} className="bg-white/[0.01] border border-white/5 p-6 flex flex-col gap-4">
+            <p className="text-[10px] text-cobalt font-bold tracking-widest uppercase">{sec}_TERM</p>
+            <div className="flex flex-col gap-2">
+              {items.filter(i => i.section === sec).map(i => (
+                <div key={i.id} onClick={() => { setEditing(i.id); setForm({ text: i.text, section: i.section }); }} className="text-[11px] text-text-muted hover:text-white cursor-pointer transition-colors p-2 border border-transparent hover:border-white/5 hover:bg-white/[0.02] flex items-start gap-2"><span className="text-cobalt opacity-40">\u25b8</span> {i.text}</div>
+              ))}
             </div>
           </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ─── Tech Stack tab ─── */
-
-const emptyTool = { name: '', version: '', usageLevel: 80 };
-
-function TechTab() {
-  const [tools, setTools] = useState<TechTool[]>([]);
-  const [form, setForm] = useState(emptyTool);
-  const [editIdx, setEditIdx] = useState<number | null>(null);
-  const [status, setStatus] = useState<{ type: 'success' | 'error' | 'idle'; msg: string }>({ type: 'idle', msg: '' });
-  const [loading, setLoading] = useState(false);
-  const [scanLoading, setScanLoading] = useState(false);
-  const [calcLoading, setCalcLoading] = useState(false);
-
-  function calcFromProjects() {
-    const stored = localStorage.getItem('portfolioProjects');
-    if (!stored) { setStatus({ type: 'error', msg: 'NO_PROJECTS_FOUND' }); return; }
-    const projects = JSON.parse(stored) as { stack?: string[] }[];
-    if (!projects.length) { setStatus({ type: 'error', msg: 'NO_PROJECTS' }); return; }
-    setCalcLoading(true);
-    const counts: Record<string, number> = {};
-    for (const p of projects) {
-      for (const tech of (p.stack ?? [])) {
-        counts[tech] = (counts[tech] ?? 0) + 1;
-      }
-    }
-    const total = projects.length;
-    const derived = Object.entries(counts)
-      .sort(([, a], [, b]) => b - a)
-      .map(([name, count]) => ({
-        name: name.toUpperCase(),
-        version: '',
-        usageLevel: Math.round((count / total) * 100),
-      }));
-    setTools(derived);
-    localStorage.setItem('portfolioTechstack', JSON.stringify(derived));
-    window.dispatchEvent(new CustomEvent('portfolioTechstackChanged'));
-    setStatus({ type: 'success', msg: `CALCULATED — ${derived.length} techs from ${total} projects` });
-    setCalcLoading(false);
-  }
-
-  async function scanAllRepos() {
-    const stored = localStorage.getItem('portfolioProjects');
-    if (!stored) { setStatus({ type: 'error', msg: 'NO_PROJECTS_FOUND' }); return; }
-    const projects = JSON.parse(stored) as { specs?: Record<string, unknown> }[];
-    const slugs = projects.map(p => p.specs?.repoSlug as string).filter(Boolean);
-    if (slugs.length === 0) { setStatus({ type: 'error', msg: 'NO_REPOS_IN_PROJECTS' }); return; }
-    setScanLoading(true);
-    try {
-      const langResults = await Promise.all(
-        slugs.map(slug => fetch(`https://api.github.com/repos/${slug}/languages`, { headers: ghHeaders() }).then(r => r.ok ? r.json() : {}))
-      );
-      const totals: Record<string, number> = {};
-      for (const langs of langResults) {
-        for (const [lang, bytes] of Object.entries(langs as Record<string, number>)) {
-          totals[lang] = (totals[lang] ?? 0) + bytes;
-        }
-      }
-      const sorted = Object.entries(totals).sort((a, b) => b[1] - a[1]);
-      const maxBytes = sorted[0]?.[1] ?? 1;
-      const existingNames = new Set(tools.map(t => t.name.toUpperCase()));
-      const newTools: TechTool[] = sorted.map(([lang, bytes]) => ({ name: lang.toUpperCase(), version: '', usageLevel: Math.round((bytes / maxBytes) * 100) }));
-      const merged = [
-        ...tools.map(t => { const found = newTools.find(n => n.name === t.name.toUpperCase()); return found ? { ...t, usageLevel: found.usageLevel } : t; }),
-        ...newTools.filter(n => !existingNames.has(n.name)),
-      ];
-      setTools(merged);
-      localStorage.setItem('portfolioTechstack', JSON.stringify(merged));
-      setStatus({ type: 'success', msg: `SCANNED ${slugs.length} REPOS — ${sorted.length} LANGS DETECTED` });
-    } catch (e: unknown) {
-      setStatus({ type: 'error', msg: e instanceof Error ? e.message : 'SCAN_FAILED' });
-    } finally { setScanLoading(false); }
-  }
-
-  const load = useCallback(async () => {
-    const stored = localStorage.getItem('portfolioTechstack');
-    if (stored) { setTools(JSON.parse(stored)); return; }
-    const res = await fetch('/data/techstack.json');
-    if (res.ok) { const content = await res.json(); setTools(content); localStorage.setItem('portfolioTechstack', JSON.stringify(content)); }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  async function save() {
-    if (!form.name.trim()) { setStatus({ type: 'error', msg: 'NAME_REQUIRED' }); return; }
-    const tool: TechTool = { name: form.name.trim().toUpperCase(), version: form.version.trim(), usageLevel: Number(form.usageLevel) };
-    setLoading(true);
-    try {
-      const updated = editIdx !== null ? tools.map((t, i) => i === editIdx ? tool : t) : [...tools, tool];
-      setTools(updated);
-      localStorage.setItem('portfolioTechstack', JSON.stringify(updated));
-      setStatus({ type: 'success', msg: editIdx !== null ? 'TOOL_UPDATED' : 'TOOL_ADDED' });
-      setForm(emptyTool); setEditIdx(null); await load();
-    } catch (e: unknown) {
-      setStatus({ type: 'error', msg: e instanceof Error ? e.message : 'SAVE_FAILED' });
-    } finally { setLoading(false); }
-  }
-
-  async function del(idx: number) {
-    setLoading(true);
-    try {
-      const updated = tools.filter((_, i) => i !== idx);
-      setTools(updated);
-      localStorage.setItem('portfolioTechstack', JSON.stringify(updated));
-      setStatus({ type: 'success', msg: 'TOOL_DELETED' }); await load();
-    } catch (e: unknown) {
-      setStatus({ type: 'error', msg: e instanceof Error ? e.message : 'DELETE_FAILED' });
-    } finally { setLoading(false); }
-  }
-
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <p className="text-[12px] text-text-faint tracking-widest uppercase">Tools ({tools.length})</p>
-        <div className="flex gap-2">
-          <button onClick={calcFromProjects} disabled={calcLoading} className="bg-cobalt/10 border border-cobalt/30 text-cobalt text-[11px] font-bold tracking-widest uppercase px-3 py-1.5 hover:bg-cobalt/20 disabled:opacity-30 transition-colors">
-            {calcLoading ? 'CALCULATING...' : 'CALC_FROM_PROJECTS'}
-          </button>
-          <button onClick={scanAllRepos} disabled={scanLoading} className="bg-cobalt/20 border border-cobalt/40 text-cobalt text-[11px] font-bold tracking-widest uppercase px-4 py-1.5 hover:bg-cobalt/30 disabled:opacity-30 transition-colors">
-            {scanLoading ? 'SCANNING...' : 'SCAN_REPOS →'}
-          </button>
-        </div>
-      </div>
-      <div className="border border-white/10 bg-carbono-surface overflow-x-auto">
-        <table className="w-full text-xs font-mono">
-          <thead><tr className="border-b border-white/10 bg-carbono">
-            <th className="text-left px-3 py-2 text-[12px] text-text-faint tracking-widest font-normal uppercase">Tool</th>
-            <th className="text-left px-3 py-2 text-[12px] text-text-faint tracking-widest font-normal uppercase">Version</th>
-            <th className="text-left px-3 py-2 text-[12px] text-text-faint tracking-widest font-normal uppercase">Usage %</th>
-            <th className="px-3 py-2"></th>
-          </tr></thead>
-          <tbody>
-            {tools.map((t, i) => (
-              <tr key={i} className="border-b border-white/5 last:border-0 hover:bg-white/[0.03]">
-                <td className="px-3 py-2 text-white uppercase">{t.name}</td>
-                <td className="px-3 py-2 text-text-muted">{t.version}</td>
-                <td className="px-3 py-2 text-cobalt">{t.usageLevel}%</td>
-                <td className="px-3 py-2 flex gap-2 justify-end">
-                  <button onClick={() => { setEditIdx(i); setForm({ name: t.name, version: t.version, usageLevel: t.usageLevel }); }} className="text-[12px] text-text-faint hover:text-white tracking-widest">EDIT</button>
-                  <button onClick={() => del(i)} className="text-[10px] text-err/60 hover:text-err tracking-widest">DEL</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="border border-white/10 bg-carbono-surface p-4 flex flex-col gap-3">
-        <p className="text-xs font-bold text-white tracking-widest border-b border-white/10 pb-2">{editIdx !== null ? 'EDIT_TOOL' : 'ADD_TOOL'}</p>
-        <div className="grid grid-cols-3 gap-3">
-          <Field label="Name" required><input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className={input} placeholder="TYPESCRIPT" /></Field>
-          <Field label="Version"><input value={form.version} onChange={e => setForm(f => ({ ...f, version: e.target.value }))} className={input} placeholder="v5.3+" /></Field>
-          <Field label="Usage (0-100)"><input type="number" min={0} max={100} value={form.usageLevel} onChange={e => setForm(f => ({ ...f, usageLevel: Number(e.target.value) }))} className={input} /></Field>
-        </div>
-        <StatusMsg status={status} />
-        <div className="flex gap-2">
-          <button onClick={save} disabled={loading} className="flex-1 bg-cobalt text-white text-xs font-bold tracking-widest uppercase py-2.5 hover:bg-cobalt-light disabled:opacity-40 transition-colors">
-            {loading ? 'PROCESSING...' : editIdx !== null ? 'UPDATE_TOOL' : 'ADD_TOOL'}
-          </button>
-          {editIdx !== null && <button onClick={() => { setEditIdx(null); setForm(emptyTool); }} className="border border-white/20 text-white text-xs tracking-widest uppercase px-4">CANCEL</button>}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ─── Ambitions tab ─── */
-
-const sectionLabels: Record<string, string> = { short: 'SHORT_TERM', mid: 'MID_TERM', long: 'LONG_TERM' };
-const emptyAmbition = { text: '', section: 'short' as Ambition['section'] };
-
-function AmbitionsTab() {
-  const [items, setItems] = useState<Ambition[]>([]);
-  const [form, setForm] = useState(emptyAmbition);
-  const [editId, setEditId] = useState<string | null>(null);
-  const [status, setStatus] = useState<{ type: 'success' | 'error' | 'idle'; msg: string }>({ type: 'idle', msg: '' });
-  const [loading, setLoading] = useState(false);
-
-  const load = useCallback(async () => {
-    const stored = localStorage.getItem('portfolioAmbitions');
-    if (stored) { setItems(JSON.parse(stored)); return; }
-    const res = await fetch('/data/ambitions.json');
-    if (res.ok) { const content = await res.json(); setItems(content); localStorage.setItem('portfolioAmbitions', JSON.stringify(content)); }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  async function save() {
-    if (!form.text.trim()) { setStatus({ type: 'error', msg: 'TEXT_REQUIRED' }); return; }
-    const item: Ambition = { id: editId ?? `${form.section}-${Date.now()}`, section: form.section, text: form.text.trim(), completed: false };
-    setLoading(true);
-    try {
-      const updated = editId ? items.map(a => a.id === editId ? item : a) : [...items, item];
-      setItems(updated);
-      localStorage.setItem('portfolioAmbitions', JSON.stringify(updated));
-      setStatus({ type: 'success', msg: editId ? 'UPDATED' : 'ADDED' });
-      setForm(emptyAmbition); setEditId(null); await load();
-    } catch (e: unknown) {
-      setStatus({ type: 'error', msg: e instanceof Error ? e.message : 'SAVE_FAILED' });
-    } finally { setLoading(false); }
-  }
-
-  async function del(id: string) {
-    setLoading(true);
-    try {
-      const updated = items.filter(a => a.id !== id);
-      setItems(updated);
-      localStorage.setItem('portfolioAmbitions', JSON.stringify(updated));
-      setStatus({ type: 'success', msg: 'DELETED' }); await load();
-    } catch (e: unknown) {
-      setStatus({ type: 'error', msg: e instanceof Error ? e.message : 'DELETE_FAILED' });
-    } finally { setLoading(false); }
-  }
-
-  return (
-    <div className="flex flex-col gap-4">
-      {(['short', 'mid', 'long'] as const).map(section => (
-        <div key={section} className="border border-white/10 bg-carbono-surface">
-          <div className="border-b border-white/10 px-4 py-2 bg-carbono">
-            <p className="text-[10px] text-cobalt tracking-widest font-bold">{sectionLabels[section]}</p>
-          </div>
-          <div className="flex flex-col">
-            {items.filter(a => a.section === section).map(a => (
-              <div key={a.id} className="flex items-center justify-between px-4 py-2 border-b border-white/5 last:border-0 hover:bg-white/[0.02]">
-                <span className={`text-xs ${a.completed ? 'line-through text-text-faint' : 'text-text-muted'}`}>{a.text}</span>
-                <div className="flex gap-3 flex-shrink-0 ml-3">
-                  <button onClick={() => { setEditId(a.id); setForm({ text: a.text, section: a.section }); }} className="text-[10px] text-text-faint hover:text-white tracking-widest">EDIT</button>
-                  <button onClick={() => del(a.id)} className="text-[10px] text-err/60 hover:text-err tracking-widest">DEL</button>
-                </div>
-              </div>
-            ))}
-            {items.filter(a => a.section === section).length === 0 && <p className="text-[10px] text-text-faint px-4 py-3 tracking-widest">EMPTY</p>}
-          </div>
-        </div>
-      ))}
-      <div className="border border-white/10 bg-carbono-surface p-4 flex flex-col gap-3">
-        <p className="text-xs font-bold text-white tracking-widest border-b border-white/10 pb-2">{editId ? 'EDIT_AMBITION' : 'ADD_AMBITION'}</p>
-        <div className="grid grid-cols-[1fr_140px] gap-3">
-          <Field label="Goal text" required><input value={form.text} onChange={e => setForm(f => ({ ...f, text: e.target.value }))} className={input} placeholder="Master WebGPU Rendering" /></Field>
-          <Field label="Section">
-            <select value={form.section} onChange={e => setForm(f => ({ ...f, section: e.target.value as Ambition['section'] }))} className={input}>
-              <option value="short">SHORT_TERM</option>
-              <option value="mid">MID_TERM</option>
-              <option value="long">LONG_TERM</option>
-            </select>
-          </Field>
-        </div>
-        <StatusMsg status={status} />
-        <div className="flex gap-2">
-          <button onClick={save} disabled={loading} className="flex-1 bg-cobalt text-white text-xs font-bold tracking-widest uppercase py-2.5 hover:bg-cobalt-light disabled:opacity-40 transition-colors">
-            {loading ? 'PROCESSING...' : editId ? 'UPDATE' : 'ADD'}
-          </button>
-          {editId && <button onClick={() => { setEditId(null); setForm(emptyAmbition); }} className="border border-white/20 text-white text-xs tracking-widest uppercase px-4">CANCEL</button>}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ─── Experience tab ─── */
-
-const emptyExp: Omit<Experience, 'id'> = { company: '', role: '', period: '', description: '', tech: [], url: '', current: false, impact: '', logoUrl: '' };
-
-function ExperienceTab() {
-  const [items, setItems] = useState<Experience[]>([]);
-  const [form, setForm] = useState<Omit<Experience, 'id'> & { techStr: string }>({ ...emptyExp, techStr: '' });
-  const [editId, setEditId] = useState<string | null>(null);
-  const [status, setStatus] = useState<{ type: 'success' | 'error' | 'idle'; msg: string }>({ type: 'idle', msg: '' });
-  const [loading, setLoading] = useState(false);
-
-  const load = useCallback(async () => {
-    const stored = localStorage.getItem('portfolioExperience');
-    if (stored) { setItems(JSON.parse(stored)); return; }
-    const res = await fetch('/data/experience.json');
-    if (res.ok) { const data = await res.json(); setItems(data); localStorage.setItem('portfolioExperience', JSON.stringify(data)); }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  function select(exp: Experience) {
-    setEditId(exp.id);
-    setForm({ company: exp.company, role: exp.role, period: exp.period, description: exp.description, tech: exp.tech, url: exp.url ?? '', current: exp.current ?? false, impact: exp.impact ?? '', logoUrl: exp.logoUrl ?? '', techStr: exp.tech.join(', ') });
-    setStatus({ type: 'idle', msg: '' });
-  }
-
-  function clear() { setEditId(null); setForm({ ...emptyExp, techStr: '' }); setStatus({ type: 'idle', msg: '' }); }
-
-  async function save() {
-    if (!form.company.trim() || !form.role.trim()) { setStatus({ type: 'error', msg: 'COMPANY y ROLE requeridos' }); return; }
-    const exp: Experience = { id: editId ?? String(Date.now()), company: form.company.trim().toUpperCase(), role: form.role.trim(), period: form.period.trim(), description: form.description.trim(), tech: form.techStr.split(',').map(t => t.trim().toUpperCase()).filter(Boolean), url: form.url?.trim() || undefined, current: form.current, impact: form.impact?.trim() || undefined, logoUrl: form.logoUrl?.trim() || undefined };
-    setLoading(true);
-    try {
-      const updated = editId ? items.map(x => x.id === editId ? exp : x) : [...items, exp];
-      setItems(updated);
-      localStorage.setItem('portfolioExperience', JSON.stringify(updated));
-      setStatus({ type: 'success', msg: editId ? 'UPDATED' : 'ADDED' });
-      clear(); await load();
-    } catch (e: unknown) { setStatus({ type: 'error', msg: e instanceof Error ? e.message : 'SAVE_FAILED' }); }
-    finally { setLoading(false); }
-  }
-
-  async function del(id: string) {
-    setLoading(true);
-    try {
-      const updated = items.filter(x => x.id !== id);
-      setItems(updated);
-      localStorage.setItem('portfolioExperience', JSON.stringify(updated));
-      setStatus({ type: 'success', msg: 'DELETED' }); clear(); await load();
-    } catch (e: unknown) { setStatus({ type: 'error', msg: e instanceof Error ? e.message : 'DELETE_FAILED' }); }
-    finally { setLoading(false); }
-  }
-
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-5">
-      <div className="flex flex-col gap-2">
-        <div className="flex justify-between items-center">
-          <p className="text-[12px] text-text-faint tracking-widest uppercase">Experience ({items.length})</p>
-          <button onClick={clear} className="text-[12px] text-cobalt tracking-widest hover:text-cobalt-light">+ NEW</button>
-        </div>
-        {items.map(exp => (
-          <button key={exp.id} onClick={() => select(exp)} className={`text-left border px-3 py-2 text-xs transition-colors ${editId === exp.id ? 'border-cobalt bg-cobalt/5 text-white' : 'border-white/10 bg-carbono-surface text-text-muted hover:border-white/20 hover:text-white'}`}>
-            <p className="font-bold text-[11px] uppercase">{exp.company}</p>
-            <p className="text-[10px] text-text-faint">{exp.role}</p>
-          </button>
         ))}
-        {items.length === 0 && <p className="text-[12px] text-text-faint tracking-widest px-2">NO_EXPERIENCE</p>}
       </div>
-      <div className="border border-white/10 bg-carbono-surface p-4 flex flex-col gap-3">
-        <div className="flex justify-between items-center border-b border-white/10 pb-3">
-          <p className="text-xs font-bold text-white tracking-widest">{editId ? `EDIT: ${form.company || editId}` : 'ADD_EXPERIENCE'}</p>
-          {editId && <button onClick={clear} className="text-[12px] text-text-faint hover:text-white">CANCEL</button>}
+      <div className="bg-white/[0.01] border border-white/5 p-10 space-y-8">
+        <p className="text-[11px] text-white font-bold uppercase">// {editing ? 'EDIT_OBJECTIVE' : 'ADD_OBJECTIVE'}</p>
+        <div className="flex gap-8">
+          <div className="flex-1"><Field label="GOAL_DESCRIPTION"><input value={form.text} onChange={e => setForm(f => ({ ...f, text: e.target.value }))} className={inputClass} /></Field></div>
+          <div className="w-48"><Field label="TIMEFRAME"><select value={form.section} onChange={e => setForm(f => ({ ...f, section: e.target.value as any }))} className={inputClass}><option value="short">SHORT</option><option value="mid">MID</option><option value="long">LONG</option></select></Field></div>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Company" required><input value={form.company} onChange={e => setForm(f => ({ ...f, company: e.target.value }))} className={input} placeholder="ACME CORP" /></Field>
-          <Field label="Role" required><input value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))} className={input} placeholder="Senior Engineer" /></Field>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Period"><input value={form.period} onChange={e => setForm(f => ({ ...f, period: e.target.value }))} className={input} placeholder="2022 — Present" /></Field>
-          <Field label="URL (opcional)"><input value={form.url || ''} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} className={input} placeholder="https://company.com" /></Field>
-        </div>
-        <Field label="Description"><textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} className={`${input} h-16 resize-none`} placeholder="Qué hiciste, qué resolviste..." /></Field>
-        <Field label="Impact (para recruiters no técnicos)"><textarea value={form.impact ?? ''} onChange={e => setForm(f => ({ ...f, impact: e.target.value }))} className={`${input} h-14 resize-none`} placeholder="Reducí el deploy time un 60%, coordiné un equipo de 5..." /></Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Tech (CSV)"><input value={form.techStr} onChange={e => setForm(f => ({ ...f, techStr: e.target.value }))} className={input} placeholder="GO, REACT, DOCKER" /></Field>
-          <Field label="Logo URL (opcional)"><input value={form.logoUrl ?? ''} onChange={e => setForm(f => ({ ...f, logoUrl: e.target.value }))} className={input} placeholder="https://company.com/logo.png" /></Field>
-        </div>
-        <div className="flex items-center gap-2">
-          <input type="checkbox" id="current" checked={form.current ?? false} onChange={e => setForm(f => ({ ...f, current: e.target.checked }))} className="accent-cobalt" />
-          <label htmlFor="current" className="text-[12px] text-text-muted tracking-widest">Trabajo actual</label>
-        </div>
-        <StatusMsg status={status} />
-        <div className="flex gap-2">
-          <button onClick={save} disabled={loading} className="flex-1 bg-cobalt text-white text-[12px] font-bold tracking-widest uppercase py-3 hover:bg-cobalt-light disabled:opacity-40 transition-colors">
-            {loading ? 'PROCESANDO...' : editId ? 'ACTUALIZAR' : 'AGREGAR'}
-          </button>
-          {editId && <button onClick={() => del(editId)} disabled={loading} className="border border-err/40 text-err text-[12px] font-bold tracking-widest uppercase px-4 hover:bg-err/5 transition-colors">ELIMINAR</button>}
-        </div>
+        <button onClick={save} className="px-8 py-3 bg-cobalt text-white text-[10px] font-bold uppercase">SAVE_GOAL</button>
       </div>
     </div>
   );
 }
 
-/* ─── Settings tab ─── */
+/* ─── Settings Tab ─── */
 
-const DEFAULT_SETTINGS: SiteSettings = { availabilityValue: 99.9, dustThresholdDays: 60, starsForGold: 5, status: 'ONLINE', logLimit: 10 };
+function SettingsTab({ onLog }: { onLog: (msg: string) => void }) {
+  const [settings, setSettings] = useState<SiteSettings>({ availabilityValue: 99.9, dustThresholdDays: 60, starsForGold: 5, status: 'ONLINE', logLimit: 10 });
+  const [cvLoading, setCvLoading] = useState(false);
 
-function SettingsTab() {
-  const [settings, setSettings] = useState<SiteSettings>(DEFAULT_SETTINGS);
-  const [saved, setSaved] = useState(false);
-  const [cvUploading, setCvUploading] = useState(false);
-  const [cvStatus, setCvStatus] = useState<{ type: 'success' | 'error' | 'idle'; msg: string }>({ type: 'idle', msg: '' });
-
-  async function uploadCv(file: File) {
-    const repo = import.meta.env.PUBLIC_GITHUB_REPO;
-    if (!repo) { setCvStatus({ type: 'error', msg: 'Falta PUBLIC_GITHUB_REPO en .env' }); return; }
-
-    setCvUploading(true);
-    setCvStatus({ type: 'idle', msg: 'Leyendo archivo...' });
-
-    try {
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve((reader.result as string).split(',')[1]);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-
-      setCvStatus({ type: 'idle', msg: 'Subiendo CV...' });
-      const res = await fetch('/api/github', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'uploadCv', base64, repo }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? `Upload failed ${res.status}`);
-
-      update({ cvUrl: '/cv.pdf' });
-      setCvStatus({ type: 'success', msg: '✓ CV subido — disponible en /cv.pdf (Vercel redeploya en ~30s)' });
-    } catch (e: unknown) {
-      setCvStatus({ type: 'error', msg: e instanceof Error ? e.message : 'Upload failed' });
-    } finally {
-      setCvUploading(false);
-    }
-  }
-
-  useEffect(() => {
-    const stored = localStorage.getItem('portfolioSettings');
-    if (stored) { setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(stored) }); return; }
-    fetch('/data/settings.json').then(r => r.ok ? r.json() : null).then(data => {
-      if (data) { setSettings({ ...DEFAULT_SETTINGS, ...data }); localStorage.setItem('portfolioSettings', JSON.stringify(data)); }
-    }).catch(() => {});
-  }, []);
+  useEffect(() => { const s = localStorage.getItem('portfolioSettings'); if (s) setSettings(JSON.parse(s)); }, []);
 
   function update(partial: Partial<SiteSettings>) {
-    const next = { ...settings, ...partial };
-    setSettings(next);
+    const next = { ...settings, ...partial }; setSettings(next);
     localStorage.setItem('portfolioSettings', JSON.stringify(next));
     window.dispatchEvent(new CustomEvent('portfolioSettingsChanged'));
-    const keys = Object.keys(partial);
-    if (keys.some(k => !['cvUrl'].includes(k))) {
-      logActivity('INFO', `SETTINGS_UPDATED — ${keys.join(', ')}`);
-    }
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    onLog(`PARAM_MODIFIED: ${Object.keys(partial)[0].toUpperCase()}`);
+  }
+
+  async function uploadCv(e: any) {
+    const file = e.target.files?.[0]; if (!file) return;
+    setCvLoading(true); onLog('CV_UPLOAD_INITIALIZED...');
+    try {
+      const b64 = await new Promise(r => { const rd = new FileReader(); rd.onload = () => r((rd.result as string).split(',')[1]); rd.readAsDataURL(file); });
+      const res = await fetch('/api/github', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'uploadCv', base64: b64, repo: import.meta.env.PUBLIC_GITHUB_REPO }) });
+      if (!res.ok) throw new Error('API_REJECTED');
+      update({ cvUrl: '/cv.pdf' }); onLog('CV_UPLOAD_SUCCESS');
+    } catch (e: any) { onLog(`CV_UPLOAD_ERROR: ${e.message}`); }
+    finally { setCvLoading(false); }
   }
 
   return (
-    <div className="flex flex-col gap-6 max-w-lg">
-      {saved && <p className="text-[12px] text-cobalt tracking-widest">✓ SETTINGS_SAVED — se aplica en tiempo real</p>}
-
-      <div className="border border-white/10 bg-carbono-surface p-5 flex flex-col gap-4">
-        <p className="text-xs font-bold text-white tracking-widest border-b border-white/10 pb-2">IDENTITY</p>
-
-            <div className="flex flex-col gap-1">
-              <label className="text-[12px] text-text-faint tracking-widest uppercase">
-                Availability: <span className="text-cobalt">{settings.availabilityValue.toFixed(1)}%</span>
-              </label>
-              <input type="range" min={0} max={100} step={0.1} value={settings.availabilityValue}
-                onChange={e => update({ availabilityValue: Number(e.target.value) })}
-                className="w-full accent-cobalt" />
+    <div className="flex flex-col gap-10">
+      <div className="grid grid-cols-2 gap-10">
+        <div className="bg-white/[0.01] border border-white/5 p-10 space-y-10">
+          <p className="text-[11px] text-cobalt tracking-widest font-bold uppercase">// MASTER_CONTROLS</p>
+          <div className="space-y-6">
+            <Field label="AVAILABILITY (%)"><input type="range" min={0} max={100} step={0.1} value={settings.availabilityValue} onChange={e => update({ availabilityValue: Number(e.target.value) })} className="w-full accent-cobalt h-1 bg-white/5 appearance-none" /></Field>
+            <Field label="SYSTEM_STATUS"><select value={settings.status} onChange={e => update({ status: e.target.value as any })} className={inputClass}><option value="ONLINE">ONLINE</option><option value="BUSY">BUSY</option><option value="OFFLINE">OFFLINE</option></select></Field>
+            <div className="pt-6 border-t border-white/5 space-y-4">
+              <div className="flex justify-between items-center">
+                <p className="text-[10px] text-text-faint tracking-widest uppercase font-bold">// SECURE_CV_UPLINK</p>
+                {settings.cvUrl && (
+                  <a 
+                    href={settings.cvUrl} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-[9px] text-cobalt hover:underline tracking-widest uppercase font-bold"
+                  >
+                    [ VIEW_CURRENT_CV ]
+                  </a>
+                )}
+              </div>
+              <input type="file" onChange={uploadCv} className="hidden" id="cv-up" />
+              <label htmlFor="cv-up" className="block text-center border border-white/10 p-4 cursor-pointer text-[10px] text-white/40 hover:text-white hover:border-cobalt transition-all uppercase tracking-widest font-bold">{cvLoading ? 'UPLOADING...' : '[ CLICK_TO_UPLOAD_PDF ]'}</label>
             </div>
-
-        <Field label="Status">
-          <select value={settings.status ?? 'ONLINE'} onChange={e => update({ status: e.target.value as SiteSettings['status'] })} className={input}>
-            <option value="ONLINE">ONLINE</option>
-            <option value="BUSY">BUSY</option>
-            <option value="OFFLINE">OFFLINE</option>
-          </select>
-        </Field>
-
-        {/* CV Upload */}
-        <div className="flex flex-col gap-2">
-          <label className="text-[12px] text-text-faint tracking-widest uppercase">CV / Resume</label>
-
-          {/* File upload */}
-          <label className={`flex items-center gap-3 border border-dashed px-4 py-3 cursor-pointer transition-colors ${cvUploading ? 'border-white/10 opacity-40 pointer-events-none' : 'border-white/20 hover:border-cobalt/60'}`}>
-            <input
-              type="file"
-              accept=".pdf"
-              className="hidden"
-              disabled={cvUploading}
-              onChange={e => { const f = e.target.files?.[0]; if (f) uploadCv(f); e.target.value = ''; }}
-            />
-            <span className="text-[11px] text-cobalt tracking-widest">
-              {cvUploading ? '↑ SUBIENDO...' : '↑ SUBIR PDF'}
-            </span>
-            <span className="text-[10px] text-text-faint/60">
-              {settings.cvUrl === '/cv.pdf' ? 'cv.pdf ya subido — reemplazar' : 'seleccioná un .pdf'}
-            </span>
-          </label>
-
-          {cvStatus.msg && (
-            <p className={`text-[11px] tracking-widest ${cvStatus.type === 'success' ? 'text-cobalt' : cvStatus.type === 'error' ? 'text-err' : 'text-text-faint animate-pulse'}`}>
-              {cvStatus.msg}
-            </p>
-          )}
-
-          {/* Manual URL fallback */}
-          <div className="flex flex-col gap-1 mt-1">
-            <span className="text-[10px] text-text-faint/50 tracking-widest">o usá una URL externa</span>
-            <input
-              value={settings.cvUrl ?? ''}
-              onChange={e => update({ cvUrl: e.target.value.trim() || undefined })}
-              className={input}
-              placeholder="https://drive.google.com/..."
-            />
-          </div>
-          <p className="text-[10px] text-text-faint/50">Aparece como botón ↓ DOWNLOAD CV y como comando <code className="text-cobalt">wget cv.pdf</code> en la terminal</p>
-        </div>
-
-        <Field label="LinkedIn URL">
-          <input
-            value={settings.linkedinUrl ?? ''}
-            onChange={e => update({ linkedinUrl: e.target.value.trim() || undefined })}
-            className={input}
-            placeholder="https://linkedin.com/in/tu-perfil"
-          />
-        </Field>
-      </div>
-
-      <div className="border border-white/10 bg-carbono-surface p-5 flex flex-col gap-4">
-        <p className="text-xs font-bold text-white tracking-widest border-b border-white/10 pb-2">EFECTOS VISUALES</p>
-
-        <div className="flex flex-col gap-1">
-          <label className="text-[12px] text-text-faint tracking-widest uppercase">
-            Dust threshold: <span className="text-warn">{settings.dustThresholdDays} días</span>
-          </label>
-          <p className="text-[10px] text-text-faint/60">Días sin commits antes de que empiece el polvo</p>
-          <input type="range" min={7} max={365} step={1} value={settings.dustThresholdDays}
-            onChange={e => update({ dustThresholdDays: Number(e.target.value) })}
-            className="w-full accent-warn" />
-          <div className="flex justify-between text-[9px] text-text-faint/40">
-            <span>7d</span><span>60d (default)</span><span>365d</span>
           </div>
         </div>
-
-        <div className="flex flex-col gap-1">
-          <label className="text-[12px] text-text-faint tracking-widest uppercase">
-            Stars para Oro: <span className="text-bronze">{settings.starsForGold} ★</span>
-          </label>
-          <p className="text-[10px] text-text-faint/60">Stars mínimas para activar el efecto bronce/oro automáticamente</p>
-          <input type="range" min={0} max={50} step={1} value={settings.starsForGold}
-            onChange={e => update({ starsForGold: Number(e.target.value) })}
-            className="w-full accent-bronze" />
-          <div className="flex justify-between text-[9px] text-text-faint/40">
-            <span>0 (todos)</span><span>5 (default)</span><span>50</span>
+        <div className="bg-white/[0.01] border border-white/5 p-10 space-y-10">
+          <p className="text-[11px] text-cobalt tracking-widest font-bold uppercase">// ENGINE_PARAMS</p>
+          <div className="space-y-8">
+            <Field label="DUST_THRESHOLD (DAYS)"><input type="range" min={7} max={365} value={settings.dustThresholdDays} onChange={e => update({ dustThresholdDays: Number(e.target.value) })} className="w-full accent-warn h-1 bg-white/5 appearance-none" /></Field>
+            <Field label="GOLD_REQUIREMENT (STARS)"><input type="range" min={0} max={50} value={settings.starsForGold} onChange={e => update({ starsForGold: Number(e.target.value) })} className="w-full accent-bronze h-1 bg-white/5 appearance-none" /></Field>
+          </div>
+          <div className="pt-10 border-t border-err/20">
+            <button onClick={() => { if(confirm('RESET?')) { localStorage.clear(); window.location.reload(); } }} className="w-full py-4 border border-err/30 text-err text-[10px] font-bold uppercase hover:bg-err/10 transition-all">FACTORY_RESET_CACHE</button>
           </div>
         </div>
-      </div>
-
-      <div className="border border-white/10 bg-carbono/40 p-4 text-[11px] text-text-faint leading-relaxed">
-        <p className="text-cobalt font-bold mb-1 tracking-widest text-[10px]">NOTA</p>
-        Los cambios se aplican en tiempo real al portfolio. Para persistirlos entre sesiones, usá el botón <span className="text-cobalt">↑ PUBLISH</span>.
       </div>
     </div>
   );
 }
 
-/* ─── Publish tab ─── */
+/* ─── Publish Tab ─── */
 
-function PublishTab() {
-  const [repo, setRepo] = useState(import.meta.env.PUBLIC_GITHUB_REPO ?? '');
-  const [branch, setBranch] = useState('main');
-  const [status, setStatus] = useState<{ type: 'success' | 'error' | 'idle'; msg: string }>({ type: 'idle', msg: '' });
+function PublishTab({ onLog }: { onLog: (msg: string) => void }) {
+  const repo = import.meta.env.PUBLIC_GITHUB_REPO;
   const [publishing, setPublishing] = useState(false);
   const [builds, setBuilds] = useState<BuildEntry[]>([]);
 
-  useEffect(() => {
-    const stored = localStorage.getItem('portfolioBuildHistory');
-    if (stored) setBuilds(JSON.parse(stored));
-  }, []);
-
-  function nextBuildNumber(): number {
-    const stored = localStorage.getItem('portfolioBuildHistory');
-    if (!stored) return 1;
-    const history: BuildEntry[] = JSON.parse(stored);
-    return (history[0]?.buildNumber ?? 0) + 1;
-  }
-
-  function saveBuild(entry: BuildEntry) {
-    const stored = localStorage.getItem('portfolioBuildHistory');
-    const history: BuildEntry[] = stored ? JSON.parse(stored) : [];
-    const updated = [entry, ...history].slice(0, 20);
-    localStorage.setItem('portfolioBuildHistory', JSON.stringify(updated));
-    setBuilds(updated);
-  }
+  useEffect(() => { const s = localStorage.getItem('portfolioBuildHistory'); if (s) setBuilds(JSON.parse(s)); }, []);
 
   async function publish() {
-    if (!repo.includes('/')) { setStatus({ type: 'error', msg: 'Repo inválido — formato: owner/repo' }); return; }
-
-    setPublishing(true);
-    setStatus({ type: 'idle', msg: '' });
-    const buildNum = nextBuildNumber();
-
+    setPublishing(true); onLog('INIT_GLOBAL_SYNC...');
     try {
-      const fileDefs = [
-        { key: 'portfolioProjects',   path: 'public/data/projects.json',   label: 'projects' },
-        { key: 'portfolioTechstack',  path: 'public/data/techstack.json',  label: 'techstack' },
-        { key: 'portfolioAmbitions',  path: 'public/data/ambitions.json',  label: 'ambitions' },
-        { key: 'portfolioExperience', path: 'public/data/experience.json', label: 'experience' },
-        { key: 'portfolioSettings',   path: 'public/data/settings.json',   label: 'settings' },
-      ];
-
-      const toCommit = fileDefs.filter(f => !!localStorage.getItem(f.key));
-      if (toCommit.length === 0) throw new Error('No hay datos para publicar');
-
-      const files = toCommit.map(f => ({ path: f.path, content: localStorage.getItem(f.key)! }));
-
-      setStatus({ type: 'idle', msg: 'Publishing...' });
-      const res = await fetch('/api/github', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'publish', repo, branch, files, buildNum }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? `Publish failed ${res.status}`);
-
-      const entry: BuildEntry = {
-        buildNumber: buildNum,
-        status: 'SUCCESS',
-        timestamp: new Date().toISOString().slice(0, 19).replace('T', ' '),
-        files: toCommit.map(f => f.label),
-      };
-      saveBuild(entry);
-      logActivity('MILESTONE', `PUBLISHED build #${buildNum} — ${toCommit.map(f => f.label).join(', ')}`);
-      setStatus({ type: 'success', msg: `BUILD #${buildNum} — SUCCESS — Vercel redeploya en ~30s` });
-    } catch (e: unknown) {
-      const entry: BuildEntry = {
-        buildNumber: buildNum,
-        status: 'FAIL',
-        timestamp: new Date().toISOString().slice(0, 19).replace('T', ' '),
-        files: [],
-      };
-      saveBuild(entry);
-      setStatus({ type: 'error', msg: e instanceof Error ? e.message : 'PUBLISH_FAILED' });
-    } finally { setPublishing(false); }
+      const keys = ['portfolioProjects', 'portfolioSettings', 'portfolioExperience', 'portfolioAmbitions', 'portfolioTechstack'];
+      const files = keys.filter(k => !!localStorage.getItem(k)).map(k => ({ path: `public/data/${k.replace('portfolio', '').toLowerCase()}.json`, content: localStorage.getItem(k)! }));
+      const res = await fetch('/api/github', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'publish', repo, branch: 'main', files }) });
+      if (!res.ok) throw new Error('BRIDGE_REJECTED');
+      onLog('UPLINK_SUCCESS');
+      const entry: BuildEntry = { buildNumber: (builds[0]?.buildNumber ?? 0) + 1, status: 'SUCCESS', timestamp: new Date().toISOString().slice(0, 19).replace('T', ' '), files: files.map(f => f.path.split('/').pop()!) };
+      const next = [entry, ...builds].slice(0, 10); localStorage.setItem('portfolioBuildHistory', JSON.stringify(next)); setBuilds(next);
+    } catch (e: any) { onLog(`UPLINK_ERROR: ${e.message}`); }
+    finally { setPublishing(false); }
   }
 
   return (
-    <div className="flex flex-col gap-5 max-w-lg">
-      <div className="border border-white/10 bg-carbono-surface p-5 flex flex-col gap-4">
-        <div>
-          <p className="text-xs font-bold text-white tracking-widest mb-1">DEPLOY → GITHUB → VERCEL</p>
-          <p className="text-xs text-text-muted leading-relaxed">Un solo commit con todos los cambios. Vercel detecta el push y redeploya automáticamente.</p>
-        </div>
-        <div className="grid grid-cols-[1fr_120px] gap-3">
-          <Field label="Repo (owner/repo)">
-            <input value={repo} onChange={e => setRepo(e.target.value)} className={input} placeholder="Alejandro-M-P/portfolio" />
-          </Field>
-          <Field label="Branch">
-            <input value={branch} onChange={e => setBranch(e.target.value)} className={input} placeholder="main" />
-          </Field>
-        </div>
-        <StatusMsg status={status} />
-        <button onClick={publish} disabled={publishing} className="bg-cobalt text-white text-xs font-bold tracking-widest uppercase py-3 hover:bg-cobalt-light disabled:opacity-40 transition-colors">
-          {publishing ? 'PUBLISHING...' : '↑ PUBLISH TO GITHUB'}
-        </button>
+    <div className="flex flex-col gap-12">
+      <div className="bg-white/[0.01] border border-white/5 p-12 flex flex-col gap-10">
+        <div><p className="text-[13px] text-white tracking-[0.3em] font-bold uppercase mb-2">// DEPLOYMENT_BRIDGE</p><p className="text-[11px] text-text-faint tracking-widest uppercase opacity-40">Sync local state with remote production grid. Rebuild latency: ~60s.</p></div>
+        <div className="p-6 bg-black/40 border border-white/10"><p className="text-[9px] text-text-faint tracking-widest uppercase mb-1">target_uplink:</p><p className="text-[12px] text-cobalt font-bold tracking-[0.2em]">{repo}</p></div>
+        <button onClick={publish} disabled={publishing} className="bg-cobalt text-white text-[11px] font-bold tracking-[0.4em] py-6 hover:bg-cobalt-light transition-all shadow-[0_0_50px_rgba(0,85,255,0.2)]">{publishing ? 'SYNCHRONIZING_BUFFERS...' : 'EXECUTE_PUBLISH_SEQUENCE \u2191'}</button>
       </div>
-
-      {/* Build history */}
-      <div className="border border-white/10 bg-carbono-surface flex flex-col">
-        <div className="border-b border-white/10 px-4 py-2 bg-carbono flex items-center justify-between">
-          <p className="text-[10px] text-text-faint tracking-widest uppercase font-bold">BUILD HISTORY</p>
-          {builds.length > 0 && (
-            <button onClick={() => { localStorage.removeItem('portfolioBuildHistory'); setBuilds([]); }} className="text-[10px] text-err/60 hover:text-err tracking-widest">CLEAR</button>
-          )}
-        </div>
-        {builds.length === 0 ? (
-          <p className="text-[11px] text-text-faint px-4 py-3 tracking-widest">NO_BUILDS_YET</p>
-        ) : (
-          builds.map(b => (
-            <div key={b.buildNumber} className={`px-4 py-2 border-b border-white/5 last:border-0 flex items-center gap-3 text-[11px] ${b.status === 'SUCCESS' ? '' : 'bg-err/5'}`}>
-              <span className={`font-bold tracking-widest flex-shrink-0 ${b.status === 'SUCCESS' ? 'text-cobalt' : 'text-err'}`}>
-                #{b.buildNumber}
-              </span>
-              <span className={`text-[10px] font-bold tracking-widest ${b.status === 'SUCCESS' ? 'text-cobalt' : 'text-err'}`}>{b.status}</span>
-              <span className="text-text-faint tabular-nums">{b.timestamp}</span>
-              <span className="text-text-faint/50 text-[10px] ml-auto">[{b.files.join(', ')}]</span>
+      <div className="space-y-6">
+        <p className="text-[10px] text-text-faint tracking-widest font-bold uppercase">// BUILD_HISTORY</p>
+        <div className="border border-white/5 bg-black/20 divide-y divide-white/5">
+          {builds.map(b => (
+            <div key={b.buildNumber} className="px-8 py-4 flex items-center justify-between group hover:bg-white/[0.01]">
+              <div className="flex items-center gap-6"><span className="text-cobalt font-bold">#{b.buildNumber}</span><span className="text-[10px] text-white tracking-widest">{b.status}</span><span className="text-[10px] text-text-faint opacity-40 font-mono">{b.timestamp}</span></div>
+              <span className="text-[9px] text-text-faint tracking-widest italic opacity-0 group-hover:opacity-30 transition-opacity">[{b.files.join(', ')}]</span>
             </div>
-          ))
-        )}
-      </div>
-
-      <div className="border border-cobalt/20 bg-cobalt/5 p-4 flex flex-col gap-2">
-        <p className="text-[10px] text-cobalt tracking-widest uppercase font-bold">Setup (una sola vez)</p>
-        {['Token con scope repo → GitHub → Settings → Developer settings → Tokens (classic)', 'En Vercel: Settings → Env Vars → PUBLIC_GITHUB_TOKEN, PUBLIC_ADMIN_PASSWORD, PUBLIC_GITHUB_REPO', 'Conectá el repo en Vercel → cada push redeploya automáticamente'].map((s, i) => (
-          <div key={i} className="text-[11px] text-text-muted flex gap-2">
-            <span className="text-cobalt flex-shrink-0">{i + 1}.</span><span>{s}</span>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     </div>
   );
 }
 
-/* ─── Main AdminPanel ─── */
-
-type AdminTab = 'projects' | 'experience' | 'tech' | 'ambitions' | 'settings' | 'publish';
+/* ─── Main Admin Panel Console ─── */
 
 export default function AdminPanel() {
-  const [authed, setAuthed] = useState(false);
-  const [tab, setTab] = useState<AdminTab>('projects');
+  const [auth, setAuth] = useState(false);
+  const [tab, setTab] = useState<any>('projects');
+  const [ready, setReady] = useState(false);
+  const [logs, setLogs] = useState<string[]>(['BUNKER_SYSTEM_ONLINE', 'AWAITING_OPERATOR_INPUT']);
 
+  const addLog = useCallback((msg: string) => { setLogs(prev => [`${new Date().toLocaleTimeString()} \u2014 ${msg}`, ...prev].slice(0, 50)); }, []);
+
+  useEffect(() => { if (isSessionValid()) setAuth(true); setReady(true); }, []);
+  
   useEffect(() => {
-    if (isSessionValid()) { setAuthed(true); }
-  }, []);
+    const handleKeys = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); addLog('MANUAL_SYNC_TRIGGERED'); } };
+    window.addEventListener('keydown', handleKeys); return () => window.removeEventListener('keydown', handleKeys);
+  }, [addLog]);
 
-  // Touch session on any user activity; auto-logout on timeout
-  useEffect(() => {
-    if (!authed) return;
-    const onActivity = () => touchSession();
-    const events = ['mousedown', 'keydown', 'touchstart', 'scroll'];
-    events.forEach(e => window.addEventListener(e, onActivity, { passive: true }));
-
-    const checkExpiry = setInterval(() => {
-      if (!isSessionValid()) { setAuthed(false); }
-    }, 60_000);
-
-    return () => {
-      events.forEach(e => window.removeEventListener(e, onActivity));
-      clearInterval(checkExpiry);
-    };
-  }, [authed]);
-
-  if (!authed) return <PasswordGate onAuth={() => setAuthed(true)} />;
+  if (!ready) return null;
+  if (!auth) return <PasswordGate onAuth={() => setAuth(true)} />;
 
   return (
-    <div className="min-h-screen bg-carbono text-text-primary font-mono">
-      <nav className="border-b border-white/10 bg-carbono/80 backdrop-blur-md px-6 h-12 flex items-center justify-between sticky top-0 z-10">
-        <div className="flex items-center gap-4">
-          <a href="/" className="text-[10px] text-text-faint tracking-widest hover:text-white transition-colors">← PORTFOLIO</a>
-          <span className="text-white/20">|</span>
-          <span className="text-xs font-bold text-white tracking-widest">ADMIN_PANEL</span>
+    <div className="h-screen bg-[#0f1117] flex overflow-hidden font-mono text-white select-none">
+      <aside className="w-80 border-r border-white/5 flex flex-col shrink-0 bg-[#0a0c12]">
+        <div className="p-12 border-b border-white/5 flex flex-col gap-2">
+          <p className="text-[15px] text-white tracking-[0.4em] font-bold uppercase leading-none">Bunker_OS</p>
+          <div className="flex items-center gap-2"><span className="w-1.5 h-1.5 bg-cobalt animate-pulse rounded-full" /><p className="text-[9px] text-cobalt tracking-widest uppercase font-bold">Admin_Active</p></div>
         </div>
-        <button onClick={() => { sessionStorage.removeItem(SESSION_KEY); setAuthed(false); }} className="text-[10px] text-text-faint hover:text-err tracking-widest transition-colors">LOGOUT</button>
-      </nav>
-
-      <div className="max-w-screen-xl mx-auto px-6 py-6">
-        <div className="flex flex-wrap border-b border-white/10 mb-6">
-          {([
-            ['projects',   'PROJECTS'],
-            ['experience', 'EXPERIENCE'],
-            ['tech',       'TECH & TOOLS'],
-            ['ambitions',  'AMBITIONS'],
-            ['settings',   '⚙ SETTINGS'],
-            ['publish',    '↑ PUBLISH'],
-          ] as [AdminTab, string][]).map(([t, label]) => (
-            <button key={t} onClick={() => setTab(t)} className={`px-5 py-2.5 text-xs tracking-widest uppercase border-b-2 transition-colors ${tab === t ? 'border-cobalt text-white' : 'border-transparent text-text-faint hover:text-white'} ${t === 'publish' ? 'ml-auto' : ''}`}>
-              {label}
+        <nav className="flex-1 p-6 flex flex-col gap-2">
+          {[
+            { id: 'projects', label: 'PROJECT_MODULES', icon: '◈' },
+            { id: 'tech', label: 'TECH_REGISTRY', icon: '◰' },
+            { id: 'ambitions', label: 'ROADMAP_MAPPER', icon: '▲' },
+            { id: 'settings', label: 'SYSTEM_CONFIG', icon: '⚙' },
+            { id: 'publish', label: 'PUBLISH_BRIDGE', icon: '↑' },
+          ].map(t => (
+            <button key={t.id} onClick={() => { setTab(t.id); addLog(`NAV_TO: ${t.id.toUpperCase()}`); }} className={`text-left px-8 py-5 text-[11px] tracking-[0.3em] uppercase transition-all duration-200 border-l-2 ${tab === t.id ? 'bg-cobalt/5 text-cobalt border-l-cobalt' : 'border-l-transparent text-text-faint hover:text-white hover:bg-white/[0.02]'}`}>
+              <span className="mr-6 opacity-30">{t.icon}</span> {t.label}
             </button>
           ))}
-        </div>
+        </nav>
+        <div className="p-12 border-t border-white/5"><button onClick={() => { sessionStorage.removeItem(SESSION_KEY); window.location.reload(); }} className="text-[10px] text-err/40 hover:text-err tracking-widest uppercase transition-all">✕ TERMINATE_SESSION</button></div>
+      </aside>
 
-        {tab === 'projects'   && <ProjectsTab />}
-        {tab === 'experience' && <ExperienceTab />}
-        {tab === 'tech'       && <TechTab />}
-        {tab === 'ambitions'  && <AmbitionsTab />}
-        {tab === 'settings'   && <SettingsTab />}
-        {tab === 'publish'    && <PublishTab />}
-      </div>
+      <main className="flex-1 flex flex-col min-w-0 bg-[#0f1117] shadow-[inset_0_0_150px_rgba(0,0,0,0.4)]">
+        <div className="flex-1 overflow-y-auto px-20 py-16 custom-scrollbar island-load">
+          <div className="max-w-5xl">
+            {tab === 'projects'   && <ProjectsTab onLog={addLog} />}
+            {tab === 'tech'       && <TechTab onLog={addLog} />}
+            {tab === 'ambitions'  && <AmbitionsTab onLog={addLog} />}
+            {tab === 'settings'   && <SettingsTab onLog={addLog} />}
+            {tab === 'publish'    && <PublishTab onLog={addLog} />}
+          </div>
+        </div>
+      </main>
+
+      <aside className="w-80 border-l border-white/5 bg-[#0a0c12] flex flex-col shrink-0">
+        <div className="p-10 border-b border-white/5 bg-[#0f1117]"><p className="text-[10px] text-text-faint tracking-widest font-bold uppercase leading-none">// SESSION_HISTORY</p></div>
+        <div className="flex-1 p-8 flex flex-col gap-1 overflow-y-auto text-[10px] opacity-40 hover:opacity-100 transition-opacity">
+          {logs.map((l, i) => <p key={i} className={`py-1 border-b border-white/[0.02] ${i === 0 ? 'text-cobalt font-bold' : 'text-text-faint'}`}> {'>'} {l}</p>)}
+        </div>
+        <div className="p-10 bg-[#0f1117] border-t border-white/5 flex flex-col gap-6">
+          <div className="flex flex-col gap-1"><span className="text-[9px] text-text-faint uppercase tracking-widest font-bold opacity-30 italic">operator:</span><p className="text-[11px] text-white tracking-widest font-bold uppercase">admin@gest_bunker</p></div>
+          <div className="flex flex-col gap-1"><span className="text-[9px] text-text-faint uppercase tracking-widest font-bold opacity-30 italic">status:</span><p className="text-[11px] text-green-500/80 tracking-widest font-bold uppercase">ENCRYPTED_SESSION</p></div>
+        </div>
+      </aside>
     </div>
   );
 }
