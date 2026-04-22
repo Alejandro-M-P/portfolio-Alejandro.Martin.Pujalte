@@ -17,44 +17,24 @@ interface IdentityProps {
   links?: { label: string; href: string }[];
 }
 
-function calculateAge(birthDate: string): number | null {
-  try {
-    const birth = new Date(birthDate);
-    if (isNaN(birth.getTime())) return null;
-    const today = new Date();
-    let age = today.getFullYear() - birth.getFullYear();
-    const m = today.getMonth() - birth.getMonth();
-    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
-    return age;
-  } catch {
-    return null;
-  }
-}
-
 export default function IdentitySection({ name, handle, bio, quote, status, availabilityValue, cvUrl, linkedinUrl, contactEmail, birthDate, links = [] }: IdentityProps) {
   const [imgError, setImgError] = React.useState(false);
-  const [isGlowing, setIsGlowing] = useState(false);
+  const [age, setAge] = useState<number | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
-    const onConsoleAction = (e: any) => {
-      const { action, path, file } = e.detail;
-      if (action === 'cd-nav' && path.includes('about')) {
-        setIsGlowing(true);
-        setTimeout(() => setIsGlowing(false), 2000);
+    setIsMounted(true);
+    if (birthDate) {
+      const birth = new Date(birthDate);
+      if (!isNaN(birth.getTime())) {
+        const today = new Date();
+        let calculatedAge = today.getFullYear() - birth.getFullYear();
+        const m = today.getMonth() - birth.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) calculatedAge--;
+        setAge(calculatedAge);
       }
-      if (action === 'cat-read' && (file === 'identity.json' || file === 'skills.md')) {
-        setIsGlowing(true);
-        setTimeout(() => setIsGlowing(false), 1500);
-      }
-      if (action === 'tree-radar' || action === 'deep-scan' || action === 'whoami') {
-        setIsGlowing(true);
-        setTimeout(() => setIsGlowing(false), 2000);
-      }
-    };
-
-    window.addEventListener('portfolioConsoleAction', onConsoleAction);
-    return () => window.removeEventListener('portfolioConsoleAction', onConsoleAction);
-  }, []);
+    }
+  }, [birthDate]);
 
   const forceDownload = (url: string, filename: string) => {
     fetch(url)
@@ -75,93 +55,73 @@ export default function IdentitySection({ name, handle, bio, quote, status, avai
       });
   };
 
+  if (!isMounted) return <div className="h-40 animate-pulse bg-white/5 rounded-2xl" />;
+
   return (
-    <section 
-      data-section="identity" 
-      className={`flex flex-col relative z-10 island-load transition-all duration-500 ${isGlowing ? 'ring-1 ring-cobalt/40 shadow-[0_0_20px_rgba(0,85,255,0.2)]' : ''}`}
-    >
-      <div className="flex flex-col h-full bg-transparent">
+    <section data-section="identity" className="flex flex-col h-full bg-transparent">
+      {/* CABEZAL: FOTO PEQUEÑA Y ELEGANTE */}
+      <div className="relative w-full h-40 sm:h-48 overflow-hidden border-b border-white/5 bg-black/20">
+        {!imgError ? (
+          <img
+            src="/profile.jpg"
+            alt={name}
+            className="w-full h-full object-cover object-center transition-transform duration-1000 hover:scale-105"
+            onError={() => setImgError(true)}
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-[10px] text-white/20 uppercase tracking-widest">NO_SIGNAL</div>
+        )}
+        <div className="absolute inset-0 bg-linear-to-t from-[#0a0c10] via-transparent to-transparent pointer-events-none" />
         
-        {/* CABEZAL: FOTO CENTRADA CON TEXTO SUPERPUESTO RESALTADO (ADAPTABLE) */}
-        <div className="relative w-full h-48 sm:h-64 lg:h-80 overflow-hidden transition-all duration-700 ease-in-out border-b border-white/10 bg-carbono-mid">
-          {!imgError ? (
-            <img
-              src="/profile.jpg"
-              alt={name}
-              className="w-full h-full object-cover object-center transition-transform duration-1000 hover:scale-110"
-              onError={() => setImgError(true)}
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-[11px] text-text-faint tracking-widest uppercase">NO_SIGNAL</div>
-          )}
-          
-          <div className="absolute inset-0 bg-linear-to-t from-black via-black/20 to-transparent pointer-events-none" />
-          
-          <div className="absolute bottom-0 left-0 w-full p-6 flex flex-col">
-            <div className="flex items-center justify-between mb-2">
-              <Pill variant="cobalt" className="text-[9px] font-black shadow-[0_0_15px_rgba(0,85,255,0.4)] bg-cobalt text-white">{status}</Pill>
-            </div>
-            
-            <h1 className="text-[26px] sm:text-[32px] font-black tracking-tighter text-white leading-none drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)]">
-              {name.replace('\n', ' ')}
-            </h1>
-            <div className="flex items-center gap-3 mt-2">
-              <span className="text-[12px] text-cobalt tracking-[0.3em] uppercase font-black">
-                {handle}
-              </span>
-              {birthDate && calculateAge(birthDate) !== null && (
-                <div className="flex items-center gap-1 bg-white/10 backdrop-blur-md px-1.5 py-0.5 rounded-sm">
-                   <span className="text-[10px] font-black text-white tracking-widest">{calculateAge(birthDate)}y</span>
-                </div>
-              )}
-            </div>
+        <div className="absolute bottom-0 left-0 w-full p-5 flex flex-col">
+          <Pill variant="cobalt" className="text-[8px] font-black mb-2 bg-cobalt text-white w-fit">{status}</Pill>
+          <h1 className="text-[18px] sm:text-[20px] font-black tracking-tight text-white leading-none">
+            {name.replace('\n', ' ')}
+          </h1>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-[10px] text-cobalt tracking-[0.3em] uppercase font-black opacity-80">{handle}</span>
+            {age !== null && <span className="text-[10px] font-black text-white/30">{age}y</span>}
           </div>
         </div>
+      </div>
 
-        {/* BIO Y ACCIONES COMPACTAS */}
-        <div className="p-6 flex flex-col gap-5">
-          <p className="text-[13px] text-text-muted leading-relaxed font-medium italic opacity-80 pl-3 border-l border-cobalt/30">
-            {bio}
-          </p>
+      {/* BIO Y ACCIONES VERTICALES */}
+      <div className="p-5 flex flex-col gap-6">
+        <p className="text-[12px] text-text-muted leading-relaxed font-medium italic opacity-70 pl-3 border-l border-white/10">
+          {bio}
+        </p>
 
-          <div className="space-y-4">
-            <AvailabilityBar value={availabilityValue} />
-            
-            <div className="flex flex-col gap-2">
-              <ContactButton href={contactEmail ? `mailto:${contactEmail}` : undefined} />
+        <div className="space-y-6">
+          <AvailabilityBar value={availabilityValue} />
+          
+          <div className="flex flex-col gap-2">
+            <ContactButton href={contactEmail ? `mailto:${contactEmail}` : undefined} />
 
-              {cvUrl && (
+            {cvUrl && (
+              <div className="flex flex-col gap-1.5">
                 <button
                   onClick={() => forceDownload(cvUrl, 'Alejandro-CV.pdf')}
                   className="w-full bg-cobalt text-white text-[10px] font-black tracking-[0.2em] uppercase px-4 py-3 hover:bg-blue-500 transition-all duration-150 active:scale-[0.98] shadow-lg border border-white/10"
                 >
                   ↓ DOWNLOAD CV (EN)
                 </button>
-              )}
+                <p className="text-[9px] text-white/20 tracking-widest uppercase text-center font-bold">
+                  // CV — Work experience and history
+                </p>
+              </div>
+            )}
 
-              {linkedinUrl && (
-                <a
-                  href={linkedinUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full bg-white/5 border border-white/10 text-white/70 text-center text-[10px] font-black tracking-[0.2em] uppercase px-4 py-3 hover:bg-[#0077B5] hover:text-white transition-all duration-150 active:scale-[0.98]"
-                >
-                  LINKEDIN
-                </a>
-              )}
+            {linkedinUrl && (
+              <a href={linkedinUrl} target="_blank" rel="noopener noreferrer" className="w-full bg-white/5 border border-white/10 text-white/60 text-center text-[10px] font-black tracking-[0.2em] uppercase px-4 py-3 hover:bg-[#0077B5] hover:text-white transition-all duration-150 active:scale-[0.98]">
+                LINKEDIN
+              </a>
+            )}
 
-              {links.map(link => (
-                <a
-                  key={link.href}
-                  href={link.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full border border-white/10 bg-white/[0.02] text-white/40 text-center text-[10px] font-black tracking-[0.2em] uppercase px-4 py-3 hover:bg-white/10 hover:text-white transition-all duration-150 active:scale-[0.98]"
-                >
-                  {link.label}
-                </a>
-              ))}
-            </div>
+            {links.map(link => (
+              <a key={link.href} href={link.href} target="_blank" rel="noopener noreferrer" className="w-full border border-white/10 bg-white/[0.02] text-white/40 text-center text-[10px] font-black tracking-[0.2em] uppercase px-4 py-3 hover:bg-white/10 hover:text-white transition-all duration-150 active:scale-[0.98]">
+                {link.label}
+              </a>
+            ))}
           </div>
         </div>
       </div>

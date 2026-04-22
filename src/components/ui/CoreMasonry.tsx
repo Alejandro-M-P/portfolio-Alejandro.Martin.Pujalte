@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 
 interface MasonryItem {
@@ -10,114 +10,127 @@ interface CoreMasonryProps {
   items: MasonryItem[];
 }
 
-function SectionHeader({ title }: { title: string }) {
+// CAJA UNIFICADA: FUERTE Y VISIBLE
+function ContentBox({ children, className = "", layoutId }: { children: React.ReactNode; className?: string; layoutId?: string }) {
   return (
-    <div className="flex flex-col gap-1.5 mb-6">
-      <div className="flex items-center gap-3">
-        <div className="w-1 h-3 bg-cobalt" />
-        <h2 className="text-[11px] text-white/60 font-black tracking-[0.4em] uppercase">{title}</h2>
+    <motion.section
+      layoutId={layoutId}
+      className={`bg-[#121212] border border-white/20 rounded-[2.5rem] overflow-hidden flex flex-col island-load shadow-[0_20px_50px_rgba(0,0,0,0.5)] ${className}`}
+    >
+      {children}
+    </motion.section>
+  );
+}
+
+function SectionHeader({ title, comment }: { title: string; comment?: string }) {
+  return (
+    <div className="flex flex-col gap-1.5 mb-6 px-1">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-1.5 h-4 bg-cobalt shadow-[0_0_15px_rgba(0,85,255,0.6)]" />
+          <h2 className="text-[12px] text-white font-black tracking-[0.4em] uppercase">{title}</h2>
+        </div>
+        {comment && <span className="hidden sm:block text-[9px] text-white/30 font-bold tracking-widest uppercase italic">{comment}</span>}
       </div>
-      <div className="h-px bg-white/5 w-full" />
+      <div className="h-px bg-white/10 w-full" />
     </div>
   );
 }
 
 export default function CoreMasonry({ items }: CoreMasonryProps) {
-  const [showMobileLogs, setShowMobileLogs] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => { setIsMounted(true); }, []);
 
   const findItem = (id: string) => items.find(i => i.id === id)?.component;
 
+  // COLOR CARBONO UNIFICADO: #0d0d0d
+  if (!isMounted) return <div className="w-full h-screen bg-[#0d0d0d]" />;
+
   return (
-    <div className="w-full min-h-screen bg-black font-sans select-none relative overflow-x-hidden text-white">
+    <div className="w-full min-h-screen bg-[#0d0d0d] font-sans select-none relative overflow-x-hidden text-white flex flex-col">
       
-      {/* BOTÓN FLOTANTE TERMINAL (Solo Móvil) */}
-      <button 
-        onClick={() => setShowMobileLogs(!showMobileLogs)}
-        className="lg:hidden fixed bottom-6 right-6 z-50 w-14 h-14 bg-cobalt text-white rounded-full shadow-[0_0_30px_rgba(0,85,255,0.4)] flex items-center justify-center border border-white/20 active:scale-90 transition-all"
-      >
-        <span className="text-xl">{showMobileLogs ? '✕' : '📟'}</span>
-      </button>
+      {/* HEADER MÓVIL (CARBONO) */}
+      <header className="lg:hidden h-20 bg-[#0d0d0d]/80 border-b border-white/10 px-6 flex items-center justify-between sticky top-0 z-50 backdrop-blur-xl">
+        <p className="text-[14px] font-black tracking-[0.3em] uppercase">Core_OS <span className="text-cobalt">Terminal</span></p>
+        <button 
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)} 
+          className="w-12 h-12 flex items-center justify-center bg-white/5 rounded-xl border border-white/10 active:scale-95 transition-all"
+        >
+          {mobileMenuOpen ? '✕' : '📟'}
+        </button>
+      </header>
 
-      {/* DRAWER DE LOGS (Solo Móvil) */}
-      <div className={`
-        lg:hidden fixed inset-x-0 bottom-0 z-40 bg-black/95 border-t border-white/10 transition-transform duration-500 ease-out p-6 pt-10
-        ${showMobileLogs ? 'translate-y-0' : 'translate-y-full'}
-        h-[70vh] flex flex-col backdrop-blur-xl
+      {/* DRAWER MÓVIL */}
+      <aside className={`
+        lg:hidden fixed inset-0 z-40 bg-[#0d0d0d] transition-transform duration-500 ease-in-out pt-24
+        ${mobileMenuOpen ? 'translate-x-0' : 'translate-x-full'}
       `}>
-        <div className="flex items-center justify-between mb-6 border-b border-white/5 pb-3">
-          <span className="text-[10px] text-cobalt font-black tracking-[0.4em] uppercase tracking-widest text-center flex-1">System_Live_Telemetry</span>
+        <div className="h-full flex flex-col p-8 gap-8 overflow-y-auto">
+          <span className="text-[10px] text-cobalt font-black tracking-[0.4em] uppercase">// SYSTEM_TELEMETRY</span>
+          <div className="flex-1 bg-white/[0.02] border border-white/5 rounded-3xl p-6 overflow-y-auto custom-scrollbar font-mono text-[11px] opacity-70 text-blue-100/60 leading-relaxed">
+            {findItem('logs')}
+          </div>
+          <button onClick={() => setMobileMenuOpen(false)} className="w-full py-5 bg-white/5 border border-white/10 text-[12px] font-black uppercase text-white rounded-2xl">Close Terminal</button>
         </div>
-        <div className="flex-1 overflow-y-auto custom-scrollbar font-mono text-[11px] opacity-60 text-blue-100/80 leading-relaxed">
-          {findItem('logs')}
-        </div>
-      </div>
+      </aside>
 
-      {/* UNIFIED RESPONSIVE GRID - DARK INDUSTRIAL */}
-      <div className="max-w-[2400px] mx-auto p-4 sm:p-6 lg:p-10 lg:h-screen lg:max-h-screen flex flex-col lg:flex-row gap-6 md:gap-8 min-h-0">
+      {/* GRID UNIFICADO */}
+      <div className="max-w-[2400px] mx-auto p-4 sm:p-6 lg:p-10 lg:h-screen lg:max-h-screen flex flex-col lg:flex-row gap-8 md:gap-12 min-h-0">
         
-        {/* COLUMNA 1: IDENTIDAD */}
-        <div className="w-full lg:w-[clamp(320px,22vw,440px)] flex flex-col gap-6 shrink-0 lg:h-full">
-          <motion.div 
-            layoutId="identity"
-            className="w-full bg-transparent lg:h-full overflow-hidden island-load border border-white/5"
-          >
-            <div className="lg:h-full lg:overflow-y-auto custom-scrollbar">
-              {findItem('identity')}
-            </div>
-          </motion.div>
+        {/* COLUMNA 1: SIDEBAR (IDENTIDAD ARRIBA + TERMINAL ABAJO) */}
+        <div className="w-full lg:w-[clamp(320px,22vw,440px)] flex flex-col gap-8 shrink-0 lg:h-full">
+          
+          {/* IDENTIDAD (ARRIBA) */}
+          <div className="lg:flex-1 lg:overflow-y-auto custom-scrollbar">
+            {findItem('identity')}
+          </div>
 
-          {/* LOGS EN DESKTOP */}
-          <motion.div 
-            layoutId="logs-desktop"
-            className="hidden lg:flex flex-col border border-white/5 bg-carbono-surface/10 overflow-hidden h-48 shrink-0"
-          >
-            <div className="flex-1 p-4 flex flex-col h-full overflow-hidden">
-              <div className="flex items-center justify-between mb-3 border-b border-white/5 pb-2">
-                <span className="text-[9px] text-white/20 font-bold tracking-[0.3em] uppercase">System_Output</span>
+          {/* TERMINAL (ABAJO) */}
+          <div className="hidden lg:flex flex-col border border-white/20 bg-[#121212] backdrop-blur-md lg:h-[700px] shrink-0 rounded-[2.5rem] overflow-hidden shadow-2xl">
+            <div className="flex-1 p-8 flex flex-col h-full overflow-hidden">
+              <div className="flex items-center justify-between mb-4 border-b border-white/10 pb-3">
+                <span className="text-[10px] text-cobalt font-black tracking-[0.3em] uppercase">Core_System_Output</span>
+                <div className="flex gap-2">
+                   <div className="w-2 h-2 rounded-full bg-cobalt animate-pulse" />
+                   <div className="w-2 h-2 rounded-full bg-white/10" />
+                </div>
               </div>
-              <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0 text-[10px] opacity-30 font-mono">
+              <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0 text-[11px] opacity-40 font-mono italic leading-relaxed">
                 {findItem('logs')}
               </div>
             </div>
-          </motion.div>
+          </div>
         </div>
 
-        {/* COLUMNA 2: PROYECTOS Y DATA */}
-        <div className="flex-1 flex flex-col gap-6 md:gap-8 lg:h-full min-w-0 min-h-0">
+        {/* COLUMNA 2: CONTENIDO (CAJAS GEMELAS VISIBLES) */}
+        <div className="flex-1 flex flex-col gap-8 md:gap-12 lg:h-full min-w-0 min-h-0">
           
-          {/* PROJECTS GRID */}
-          <motion.div 
-            layoutId="projects"
-            className="flex-1 lg:min-h-0 bg-carbono-surface/5 border border-white/5 p-6 sm:p-10 flex flex-col island-load"
-          >
-            <SectionHeader title="// DEPLOYED_MODULES" />
+          {/* CAJA PROYECTOS */}
+          <ContentBox layoutId="projects" className="flex-[2.5] p-8 md:p-12">
+            <SectionHeader title="// DEPLOYED_MODULES" comment="Live_Production_Buffer" />
             <div className="flex-1 lg:overflow-y-auto custom-scrollbar min-h-[400px] lg:min-h-0">
               {findItem('projects')}
             </div>
-          </motion.div>
+          </ContentBox>
 
-          {/* TECH & ROADMAP */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 lg:h-80 shrink-0">
+          {/* CAJAS TECH & ROADMAP (SINCRO TOTAL) */}
+          <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 shrink-0">
             
-            <motion.div 
-              layoutId="tech"
-              className="bg-carbono-surface/5 border border-white/5 p-6 sm:p-8 flex flex-col h-full"
-            >
-              <SectionHeader title="// TECH_ENVIRONMENT" />
+            <ContentBox layoutId="tech" className="p-8 sm:p-10 h-full">
+              <SectionHeader title="// TECH_ENVIRONMENT" comment="Registry_v4.2_Stable" />
               <div className="flex-1 lg:overflow-y-auto custom-scrollbar min-h-[250px] lg:min-h-0">
                 {findItem('tech')}
               </div>
-            </motion.div>
+            </ContentBox>
 
-            <motion.div 
-              layoutId="roadmap"
-              className="bg-carbono-surface/5 border border-white/5 p-6 sm:p-8 flex flex-col h-full"
-            >
-              <SectionHeader title="// STRATEGIC_ROADMAP" />
+            <ContentBox layoutId="roadmap" className="p-8 sm:p-10 h-full">
+              <SectionHeader title="// STRATEGIC_ROADMAP" comment="Strategic_Evolution_Plan_2026" />
               <div className="flex-1 lg:overflow-y-auto custom-scrollbar min-h-[250px] lg:min-h-0">
                 {findItem('roadmap')}
               </div>
-            </motion.div>
+            </ContentBox>
 
           </div>
         </div>
@@ -126,12 +139,9 @@ export default function CoreMasonry({ items }: CoreMasonryProps) {
       <style dangerouslySetInnerHTML={{ __html: `
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.05); border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }
         .island-load { animation: island-in 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-        @keyframes island-in {
-          from { opacity: 0; transform: translateY(20px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
+        @keyframes island-in { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
       `}} />
     </div>
   );

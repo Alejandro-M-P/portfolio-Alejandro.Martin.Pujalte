@@ -41,7 +41,7 @@ const totalTech = techStack.length;
       <!-- LEFT: Identity + Console -->
       <aside class="flex flex-col gap-3 min-h-0">
         <IdentitySection {...identityData} client:idle />
-        <div data-terminal-shell class="flex-1 min-h-80 border border-white/10 bg-carbono-surface overflow-hidden">
+        <div data-terminal-shell class="flex-1 min-h-[480px] border border-white/10 bg-carbono-surface overflow-hidden">
           <div class="h-full overflow-hidden">
             <CoreConsole 
               logs={logs} 
