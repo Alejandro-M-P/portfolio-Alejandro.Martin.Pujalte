@@ -81,9 +81,9 @@ export default function IdentitySection({ name, handle, bio, quote, status, avai
       className={`industrial-panel flex flex-col relative z-10 island-load overflow-hidden shadow-2xl transition-all duration-500 ${isGlowing ? 'ring-2 ring-cobalt shadow-[0_0_25px_rgba(0,85,255,0.4)]' : ''}`}
     >
       <div className="flex flex-col @container">
-        {/* Header con foto y nombre - Forzamos vertical en la sidebar (<450px) */}
-        <div className="relative w-full bg-carbono-mid @[450px]:flex @[450px]:h-28 border-b border-white/5">
-          <div className="relative w-full h-64 @[450px]:w-28 @[450px]:h-full shrink-0">
+        {/* Header con foto y nombre - Forzamos horizontal si hay >300px (el sidebar tiene 380px) */}
+        <div className="relative w-full bg-carbono-mid @[300px]:flex @[300px]:h-28 border-b border-white/5">
+          <div className="relative w-full h-64 @[300px]:w-28 @[300px]:h-full shrink-0">
             {!imgError ? (
               <img
                 src="/profile.jpg"
@@ -94,20 +94,20 @@ export default function IdentitySection({ name, handle, bio, quote, status, avai
             ) : (
               <div className="w-full h-full flex items-center justify-center text-[13px] text-text-faint tracking-widest">NO_SIGNAL</div>
             )}
-            <div className="absolute inset-0 bg-linear-to-t from-carbono-surface/80 via-transparent to-transparent @[450px]:hidden" />
+            <div className="absolute inset-0 bg-linear-to-t from-carbono-surface/80 via-transparent to-transparent @[300px]:hidden" />
           </div>
           
           {/* Nombre y status - Aparecen sobre la foto en vertical, al lado en horizontal */}
-          <div className="absolute bottom-3 left-4 @[450px]:static @[450px]:p-4 @[450px]:flex-1 @[450px]:flex @[450px]:flex-col @[450px]:justify-center">
+          <div className="absolute bottom-3 left-4 @[300px]:static @[300px]:p-4 @[300px]:flex-1 @[300px]:flex @[300px]:flex-col @[300px]:justify-center">
             <Pill variant="cobalt" className="text-[10px] mb-1.5 w-fit shadow-lg shadow-cobalt/20">{status}</Pill>
             <div className="flex flex-col gap-0.5">
-              <h1 className="text-[1.15rem] @[450px]:text-base font-bold tracking-tight text-white leading-tight drop-shadow-md">
+              <h1 className="text-[1.15rem] @[300px]:text-base font-bold tracking-tight text-white leading-tight drop-shadow-md">
                 {name.replace('\n', ' ')}
                 {birthDate && calculateAge(birthDate) !== null && (
                   <span className="text-[13px] font-normal text-white/70 ml-2">({calculateAge(birthDate)})</span>
                 )}
               </h1>
-              <span className="text-[11px] text-white/50 @[450px]:text-text-faint tracking-widest uppercase drop-shadow-sm">
+              <span className="text-[11px] text-white/50 @[300px]:text-text-faint tracking-widest uppercase drop-shadow-sm">
                 {handle}
               </span>
             </div>
