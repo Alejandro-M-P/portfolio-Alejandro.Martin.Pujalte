@@ -69,11 +69,7 @@ export default function ProjectCard({ project, onClick }: ProjectCardProps) {
   );
 
   return (
-    <div ref={ref} data-project-id={project.id}>
-      {/*
-        Full-image card: photo fills the entire card,
-        info overlaid at the bottom with a gradient.
-      */}
+    <div ref={ref} data-project-id={project.id} className="@container">
       <div
         className={`relative aspect-square cursor-pointer group overflow-hidden border transition-all duration-150
           ${isGold
@@ -100,7 +96,6 @@ export default function ProjectCard({ project, onClick }: ProjectCardProps) {
           }));
         }}
       >
-        {/* Background image — fills entire card */}
         {project.photo ? (
           <img
             src={project.photo}
@@ -116,14 +111,12 @@ export default function ProjectCard({ project, onClick }: ProjectCardProps) {
           </div>
         )}
 
-        {/* Gold shimmer */}
         {isGold && (
           <div className="absolute inset-0 pointer-events-none" style={{
             background: 'linear-gradient(135deg, rgba(184,115,51,0.12) 0%, transparent 60%, rgba(184,115,51,0.06) 100%)',
           }} />
         )}
 
-        {/* Private overlay */}
         {project.isPrivate && (
           <div className="absolute inset-0 redacted-stripes flex flex-col items-center justify-center gap-1.5">
             <div className="border-2 border-err/70 px-2.5 py-0.5 bg-carbono/80" style={{ transform: 'rotate(-6deg)' }}>
@@ -133,11 +126,9 @@ export default function ProjectCard({ project, onClick }: ProjectCardProps) {
           </div>
         )}
 
-        {/* Gradient overlay — bottom to top */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
+        <div className="absolute inset-0 bg-linear-to-t from-black/90 via-black/30 to-transparent" />
 
-        {/* Top-left badges */}
-        <div className="absolute top-2 left-2 flex gap-1.5">
+        <div className="absolute top-2 left-2 hidden @[180px]:flex gap-1.5">
           {status && statusStyle[status] && (
             <span className={`text-[10px] font-bold tracking-widest uppercase border px-2 py-1 leading-none backdrop-blur-sm ${statusStyle[status]}`}>
               {status.replace('_', ' ')}
@@ -150,27 +141,25 @@ export default function ProjectCard({ project, onClick }: ProjectCardProps) {
           )}
         </div>
 
-        {/* Top-right: stars */}
         {stars > 0 && (
-          <div className="absolute top-1.5 right-1.5 flex items-center gap-1 bg-black/60 border border-warn/40 px-2 py-1 backdrop-blur-sm">
+          <div className="absolute top-1.5 right-1.5 hidden @[150px]:flex items-center gap-1 bg-black/60 border border-warn/40 px-2 py-1 backdrop-blur-sm">
             <span className="text-sm text-warn">★</span>
             <span className="text-sm text-white font-mono font-bold">{stars}</span>
           </div>
         )}
 
-        {/* Bottom info overlay */}
         <div className="absolute bottom-0 left-0 right-0 px-3 pb-3 pt-6">
-          <p className="text-[var(--font-size-ui-header)] font-bold tracking-widest uppercase leading-tight text-white">
+          <p className="text-[14px] font-bold tracking-widest uppercase leading-tight text-white drop-shadow-md truncate">
             {project.name}
           </p>
-          <div className="flex flex-wrap gap-1.5 mt-2">
+          <div className="hidden @[250px]:flex flex-wrap gap-1.5 mt-2">
             {[...new Set(project.stack)].slice(0, 3).map(tech => (
-              <span key={tech} className="text-[var(--font-size-ui-label)] border px-2 py-1 tracking-widest uppercase backdrop-blur-sm border-white/25 text-white/70 bg-black/40">
+              <span key={tech} className="text-[10px] border px-2 py-1 tracking-widest uppercase backdrop-blur-sm border-white/25 text-white/70 bg-black/40">
                 {tech}
               </span>
             ))}
             {project.stack.length > 3 && (
-              <span className="text-[var(--font-size-ui-label)] text-white/60 py-1">+{project.stack.length - 3}</span>
+              <span className="text-[10px] text-white/60 py-1">+{project.stack.length - 3}</span>
             )}
           </div>
         </div>

@@ -17,7 +17,7 @@ export default function AllTechModal({ tools, onClose }: AllTechModalProps) {
         className="border border-white/15 bg-carbono-surface w-full max-w-2xl max-h-[88vh] flex flex-col"
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-white/10 px-5 py-3 flex-shrink-0">
+        <div className="flex items-center justify-between border-b border-white/10 px-5 py-3 shrink-0">
           <div className="flex items-center gap-3">
             <span className="text-xs font-bold text-white tracking-widest">TECH_MATRIX</span>
             <span className="text-[10px] text-text-faint tracking-widest">({tools.length} tools)</span>

@@ -5,7 +5,9 @@ import sitemap from '@astrojs/sitemap';
 import tailwindcss from '@tailwindcss/vite';
 import vercel from '@astrojs/vercel';
 
+// ADMIN_PANEL_FIX: Activamos output: 'server' para habilitar endpoints dinámicos (POST)
 export default defineConfig({
+  output: 'server',
   adapter: vercel(),
   site: 'https://alejandro-mp.dev',
   integrations: [

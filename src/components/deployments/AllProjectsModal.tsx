@@ -29,7 +29,7 @@ export default function AllProjectsModal({ projects, onClose }: AllProjectsModal
           className="bg-carbono-surface border border-white/15 w-full max-w-5xl mx-auto flex flex-col max-h-full"
           onClick={e => e.stopPropagation()}
         >
-          <div className="flex items-center justify-between border-b border-white/10 px-5 py-3 flex-shrink-0">
+          <div className="flex items-center justify-between border-b border-white/10 px-5 py-3 shrink-0">
             <div className="flex items-center gap-3">
               <span className="text-xs font-bold text-white tracking-widest">ALL_PROJECTS</span>
               <span className="text-[10px] text-text-faint tracking-widest">({sorted.length} deployed)</span>

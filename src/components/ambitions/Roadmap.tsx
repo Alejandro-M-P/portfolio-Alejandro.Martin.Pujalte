@@ -9,10 +9,10 @@ interface RoadmapProps {
 const STORAGE_KEY = 'portfolio_ambitions_v2';
 const SESSION_KEY = 'admin_session';
 
-const sectionMeta: Record<Ambition['section'], { label: string; timeframe: string }> = {
-  short: { label: 'PHASE_01: IMMEDIATE', timeframe: '0-3 MONTHS' },
-  mid:   { label: 'PHASE_02: STRATEGIC', timeframe: '3-12 MONTHS' },
-  long:  { label: 'PHASE_03: VISION',    timeframe: '1+ YEAR' },
+const DEFAULT_SECTION_META = {
+  short: { label: '', timeframe: '' },
+  mid:   { label: '', timeframe: '' },
+  long:  { label: '', timeframe: '' },
 };
 
 export default function Roadmap({ ambitions: initial }: RoadmapProps) {
@@ -21,6 +21,7 @@ export default function Roadmap({ ambitions: initial }: RoadmapProps) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [adding, setAdding] = useState<Ambition['section'] | null>(null);
   const [newText, setNewText] = useState('');
+  const [sectionMeta, setSectionMeta] = useState(DEFAULT_SECTION_META);
 
   const STORAGE_KEY_V2 = 'portfolio_ambitions_v2';
   const SESSION_KEY_V2 = 'admin_session';
@@ -28,20 +29,35 @@ export default function Roadmap({ ambitions: initial }: RoadmapProps) {
   useEffect(() => {
     setIsAdmin(sessionStorage.getItem(SESSION_KEY) === 'true');
 
+    // Load section labels from settings
+    const loadSettings = () => {
+      const settingsStored = localStorage.getItem('portfolioSettings');
+      if (settingsStored) {
+        try {
+          const settings = JSON.parse(settingsStored);
+          if (settings.roadmapLabels) {
+            setSectionMeta(settings.roadmapLabels);
+          }
+        } catch {}
+      }
+    };
+    loadSettings();
+
     // Load ambitions from localStorage first (admin panel saves here)
     const loadAmbitions = () => {
       const stored = localStorage.getItem('portfolioAmbitions');
       if (stored) {
         try {
-          setItems(JSON.parse(stored));
+          const parsed = JSON.parse(stored);
+          if (parsed.length > 0) {
+            setItems(parsed);
+            return;
+          }
         } catch (e) {
           console.warn('Failed to parse portfolioAmbitions from localStorage', e);
-          // Fallback to fetch
-          fetchAmbitionsFromJson();
         }
-        return;
       }
-      // If nothing in localStorage, fetch from JSON
+      // If nothing in localStorage, fetch from JSON (or show empty)
       fetchAmbitionsFromJson();
     };
 
@@ -96,6 +112,23 @@ export default function Roadmap({ ambitions: initial }: RoadmapProps) {
     return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
+  // Listen for settings changes to reload section labels
+  useEffect(() => {
+    const handleSettingsChange = () => {
+      const settingsStored = localStorage.getItem('portfolioSettings');
+      if (settingsStored) {
+        try {
+          const settings = JSON.parse(settingsStored);
+          if (settings.roadmapLabels) {
+            setSectionMeta(settings.roadmapLabels);
+          }
+        } catch {}
+      }
+    };
+    window.addEventListener('storage', handleSettingsChange);
+    return () => window.removeEventListener('storage', handleSettingsChange);
+  }, []);
+
   const toggle = (id: string, val: boolean) => {
     const next = { ...checked, [id]: val };
     setChecked(next);
@@ -113,16 +146,29 @@ export default function Roadmap({ ambitions: initial }: RoadmapProps) {
 
   return (
     <div className="border border-white/10 bg-carbono-surface p-4 island-load h-full overflow-y-auto">
-      <div className="flex flex-col gap-6">
-        {(['short', 'mid', 'long'] as const).map(section => {
-          const sectionItems = items.filter(a => a.section === section);
-          const { label, timeframe } = sectionMeta[section];
-          return (
-            <div key={section} className="border border-white/10 bg-carbono p-4 flex flex-col gap-3">
-              <div className="flex justify-between items-end border-b border-white/10 pb-2">
-                <p className="text-[14px] text-cobalt tracking-widest font-bold">{label}</p>
-                <p className="text-[11px] text-text-faint tracking-widest italic">{timeframe}</p>
-              </div>
+      {items.length === 0 && (
+        <div className="text-center py-8">
+          <p className="text-[14px] text-text-faint tracking-widest">NO_ROADMAP_ITEMS</p>
+          <p className="text-[12px] text-cobalt/60 mt-2">Add goals from admin panel</p>
+        </div>
+      )}
+      {items.length > 0 && (
+        <div className="flex flex-col gap-6">
+          {(['short', 'mid', 'long'] as const).map(section => {
+            const sectionItems = items.filter(a => a.section === section);
+            const { label, timeframe } = sectionMeta[section];
+            return (
+              <div key={section} className="border border-white/10 bg-carbono p-4 flex flex-col gap-3">
+                <div className="flex justify-between items-end border-b border-white/10 pb-2">
+                  {(label || timeframe) ? (
+                    <>
+                      <p className="text-[14px] text-cobalt tracking-widest font-bold">{label}</p>
+                      <p className="text-[11px] text-text-faint tracking-widest italic">{timeframe}</p>
+                    </>
+                  ) : (
+                    <p className="text-[14px] text-cobalt tracking-widest font-bold">{section.toUpperCase()}</p>
+                  )}
+                </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2">
                 {sectionItems.length === 0 && (
@@ -140,7 +186,7 @@ export default function Roadmap({ ambitions: initial }: RoadmapProps) {
                     {isAdmin && (
                       <button
                         onClick={() => removeGoal(a.id)}
-                        className="text-[14px] text-err/50 hover:text-err transition-colors flex-shrink-0 mt-0.5 opacity-0 group-hover:opacity-100"
+                        className="text-[14px] text-err/50 hover:text-err transition-colors shrink-0 mt-0.5 opacity-0 group-hover:opacity-100"
                       >×</button>
                     )}
                   </div>
@@ -178,7 +224,8 @@ export default function Roadmap({ ambitions: initial }: RoadmapProps) {
             </div>
           );
         })}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

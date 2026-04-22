@@ -1,6 +1,21 @@
-2026/04/21 23:23:53 Starting Ollama...
-2026/04/21 23:23:53 ⚠ Ollama not available: ollama binary not found. Install from https://ollama.com
-2026/04/21 23:23:53 Starting git-courer v1.3.1
-2026/04/21 23:23:53 Working directory: .
-2026/04/21 23:23:53 Ollama host: http://localhost:11434
-2026/04/21 23:23:53 Ollama model: gemma4:26b
+2026/04/22 16:05:32 Ollama host: http://localhost:114342026/04/22 16:05:32 Ollama model: gemma4:26b2026/04/22 16:05:32 Initialize: client=opencode v1.14.202026/04/22 16:05:32 Client registered: opencode v1.14.20 (sampling: false, elicitation: false)2026/04/22 16:11:09 Cerrando git-courer...2026/04/22 16:11:11 Starting Ollama...
+2026/04/22 16:11:12 ✓ Ollama started by git-courer
+2026/04/22 16:11:12 ✓ Model ready
+2026/04/22 16:11:12 Starting git-courer v1.3.1
+2026/04/22 16:11:12 Working directory: .
+2026/04/22 16:11:12 Ollama host: http://localhost:11434
+2026/04/22 16:11:12 Ollama model: gemma4:26b
+2026/04/22 16:11:12 Initialize: client=opencode v1.14.20
+2026/04/22 16:11:12 Client registered: opencode v1.14.20 (sampling: false, elicitation: false)
+2026/04/22 16:13:54 [DEBUG] prepareStages: starting for instruction: feat(admin): migrate all sensitive config to server-side, remove PUBLIC_ prefixes
+
+- Move GITHUB_REPO and GITHUB_USER to server-only via import.meta.env
+- Remove PUBLIC_GITHUB_REPO from client components  
+- Remove hardcoded versionMap and roadmapLabels from Settings tab
+- Add System tab with System Status and Engine Metrics
+- Update AvailabilityBar to show status from settings (System_Ready/Busy/Maintenance)
+- Clean up backup files
+2026/04/22 16:13:54 [DEBUG] prepareStages: status has 44 files
+2026/04/22 16:13:54 [DEBUG] prepareStages: tracked=31, untracked=13, deleted=0
+2026/04/22 16:13:54 [DEBUG] prepareStages: using allUntracked: 18 files
+2026/04/22 16:13:56 [DEBUG] gitAdapter.Add: paths=[.]

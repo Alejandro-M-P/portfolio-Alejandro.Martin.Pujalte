@@ -11,7 +11,7 @@ export default function ProfilePhoto({ src, alt = 'ALEJANDRO.MP', size = 96 }: P
 
   return (
     <div
-      className="relative border border-white/80 overflow-hidden flex-shrink-0 bg-carbono-surface flex items-center justify-center"
+      className="relative border border-white/80 overflow-hidden shrink-0 bg-carbono-surface flex items-center justify-center"
       style={{ width: size, height: size, borderRadius: '50%' }}
     >
       {src && !error ? (

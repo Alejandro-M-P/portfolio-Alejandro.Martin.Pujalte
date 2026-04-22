@@ -1,27 +1,106 @@
 import type { APIRoute } from 'astro';
+import { kv } from '@vercel/kv';
+import { 
+  authHeaders, 
+  getRepoDetails, 
+  decodeBase64 
+} from '../../lib/github-server';
 
 export const prerender = false;
 
 const GITHUB_TOKEN = import.meta.env.GITHUB_TOKEN;
+const GITHUB_REPO = import.meta.env.GITHUB_REPO;
+const GITHUB_USER = import.meta.env.GITHUB_USER;
 
-type GHHeaders = Record<string, string>;
-
-function authHeaders(): GHHeaders {
-  return {
-    Authorization: `Bearer ${GITHUB_TOKEN}`,
-    Accept: 'application/vnd.github+json',
-    'Content-Type': 'application/json',
+async function handleUploadCv(body: any) {
+  const { base64 } = body;
+  if (!base64) throw new Error('Missing base64');
+  const content = decodeBase64(base64);
+  const path = 'public/cv.pdf';
+  
+  const existing = await getRepoContent({ path });
+  const sha = existing?.content?.sha;
+  
+  const msg = {
+    message: sha ? 'Update CV' : 'Add CV',
+    content,
+    ...(sha && { sha })
   };
+  
+  const h = authHeaders();
+  const res = await fetch(`https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${path}`, {
+    method: 'PUT',
+    headers: h,
+    body: JSON.stringify(msg)
+  });
+  
+  if (!res.ok) throw new Error(`Upload failed ${res.status}`);
+  return new Response(JSON.stringify({ ok: true }), { status: 200 });
+}
+
+async function handleGetActivity(body: any) {
+  const { username } = body;
+  if (!username) throw new Error('Missing username');
+
+  const h = authHeaders();
+  const res = await fetch(`https://api.github.com/users/${username}/events/public?per_page=60`, { headers: h });
+  if (!res.ok) throw new Error(`Activity failed ${res.status}`);
+  const events = await res.json();
+  return new Response(JSON.stringify(events), { status: 200 });
+}
+
+async function handleGetUserRepos() {
+  const h = authHeaders();
+  const res = await fetch('https://api.github.com/user/repos?sort=pushed&per_page=100&affiliation=owner,collaborator,organization_member', { headers: h });
+  if (!res.ok) throw new Error(`Repos fetch failed ${res.status}`);
+  const repos = await res.json();
+  const formatted = repos.map((r: any) => ({
+    name: r.name,
+    fullName: r.full_name,
+    description: r.description,
+    language: r.language,
+    private: r.private,
+    pushedAt: r.pushed_at,
+    stars: r.stargazers_count,
+    url: r.html_url
+  }));
+  return new Response(JSON.stringify(formatted), { status: 200 });
+}
+
+async function handleGetRepoContent(body: any) {
+  const { repoSlug, path } = body;
+  if (!repoSlug) throw new Error('Missing repoSlug');
+
+  const h = authHeaders();
+  const url = path 
+    ? `https://api.github.com/repos/${repoSlug}/contents/${path}`
+    : `https://api.github.com/repos/${repoSlug}/readme`;
+
+  const res = await fetch(url, { headers: h });
+  if (!res.ok) throw new Error(`Content failed ${res.status}`);
+  const data = await res.json();
+  
+  const content = decodeBase64(data.content);
+  return new Response(JSON.stringify({
+    content,
+    path: data.path,
+    sha: data.sha
+  }), { status: 200 });
+}
+
+async function handleGetCache() {
+  const data = await kv.get('portfolio_github_cache');
+  return new Response(JSON.stringify({ data: data || null }), { status: 200 });
 }
 
 async function handlePublish(body: Record<string, unknown>) {
-  const { repo, branch, files, buildNum } = body as {
-    repo: string;
+  const { branch, files, buildNum } = body as {
     branch: string;
     files: { path: string; content: string }[];
     buildNum: number;
   };
 
+  const repo = GITHUB_REPO;
   if (!repo || !branch || !Array.isArray(files) || !files.length) {
     return new Response(JSON.stringify({ error: 'Missing required fields' }), { status: 400 });
   }
@@ -43,7 +122,7 @@ async function handlePublish(body: Record<string, unknown>) {
       const blobRes = await fetch(`https://api.github.com/repos/${repo}/git/blobs`, {
         method: 'POST',
         headers: h,
-        body: JSON.stringify({ content: btoa(unescape(encodeURIComponent(f.content))), encoding: 'base64' }),
+        body: JSON.stringify({ content: Buffer.from(f.content, 'utf-8').toString('base64'), encoding: 'base64' }),
       });
       if (!blobRes.ok) throw new Error(`Blob failed for ${f.path}`);
       const blob = await blobRes.json();
@@ -81,38 +160,6 @@ async function handlePublish(body: Record<string, unknown>) {
   return new Response(JSON.stringify({ success: true, sha: newCommit.sha }), { status: 200 });
 }
 
-async function handleUploadCv(body: Record<string, unknown>) {
-  const { base64, repo } = body as { base64: string; repo: string };
-  if (!repo || !base64) {
-    return new Response(JSON.stringify({ error: 'Missing base64 or repo' }), { status: 400 });
-  }
-
-  const h = authHeaders();
-  const filePath = 'public/cv.pdf';
-  const apiUrl = `https://api.github.com/repos/${repo}/contents/${filePath}`;
-
-  let existingSha: string | undefined;
-  const existRes = await fetch(apiUrl, { headers: h });
-  if (existRes.ok) {
-    const d = await existRes.json();
-    existingSha = d.sha;
-  }
-
-  const uploadBody: Record<string, string> = {
-    message: existingSha ? 'cv: replace resume' : 'cv: add resume',
-    content: base64,
-  };
-  if (existingSha) uploadBody.sha = existingSha;
-
-  const upRes = await fetch(apiUrl, { method: 'PUT', headers: h, body: JSON.stringify(uploadBody) });
-  if (!upRes.ok) {
-    const err = await upRes.json().catch(() => ({}));
-    throw new Error((err as { message?: string }).message ?? `Upload failed ${upRes.status}`);
-  }
-
-  return new Response(JSON.stringify({ success: true, cvUrl: '/cv.pdf' }), { status: 200 });
-}
-
 export const POST: APIRoute = async ({ request }) => {
   if (!GITHUB_TOKEN) {
     return new Response(JSON.stringify({ error: 'GITHUB_TOKEN not configured on server' }), { status: 500 });
@@ -129,6 +176,12 @@ export const POST: APIRoute = async ({ request }) => {
     const action = body.action as string;
     if (action === 'publish') return await handlePublish(body);
     if (action === 'uploadCv') return await handleUploadCv(body);
+    if (action === 'getRepoDetails') return await handleGetRepoDetails(body);
+    if (action === 'getActivity') return await handleGetActivity(body);
+    if (action === 'getRepoContent') return await handleGetRepoContent(body);
+    if (action === 'getCache') return await handleGetCache();
+    if (action === 'getUserRepos') return await handleGetUserRepos();
+    
     return new Response(JSON.stringify({ error: `Unknown action: ${action}` }), { status: 400 });
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Internal error';

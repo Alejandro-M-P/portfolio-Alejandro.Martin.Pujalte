@@ -33,7 +33,7 @@ export default function ExperienceModal({ exp, onClose }: Props) {
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-start justify-between border-b border-white/10 px-5 py-4 flex-shrink-0 gap-3">
+        <div className="flex items-start justify-between border-b border-white/10 px-5 py-4 shrink-0 gap-3">
           <div className="flex items-center gap-4 min-w-0">
             {exp.logoUrl && (
               <img
@@ -41,14 +41,14 @@ export default function ExperienceModal({ exp, onClose }: Props) {
                 alt={exp.company}
                 loading="lazy"
                 decoding="async"
-                className="w-10 h-10 object-contain flex-shrink-0 bg-carbono-mid p-1"
+                className="w-10 h-10 object-contain shrink-0 bg-carbono-mid p-1"
               />
             )}
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-base font-bold text-white uppercase tracking-wide">{exp.company}</span>
                 {exp.current && (
-                  <span className="text-[9px] font-bold tracking-widest uppercase border border-cobalt/40 text-cobalt px-1.5 py-0.5 bg-cobalt/5 flex-shrink-0">CURRENT</span>
+                  <span className="text-[9px] font-bold tracking-widest uppercase border border-cobalt/40 text-cobalt px-1.5 py-0.5 bg-cobalt/5 shrink-0">CURRENT</span>
                 )}
               </div>
               <span className="text-xs text-cobalt tracking-widest uppercase">{exp.role}</span>
@@ -57,14 +57,14 @@ export default function ExperienceModal({ exp, onClose }: Props) {
           </div>
           <button
             onClick={onClose}
-            className="text-[10px] text-text-faint hover:text-white tracking-widest border border-white/15 px-2 py-1 hover:border-white/40 transition-colors duration-100 flex-shrink-0"
+            className="text-[10px] text-text-faint hover:text-white tracking-widest border border-white/15 px-2 py-1 hover:border-white/40 transition-colors duration-100 shrink-0"
           >
             [ESC]
           </button>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-white/10 flex-shrink-0">
+        <div className="flex border-b border-white/10 shrink-0">
           <button
             onClick={() => setTab('overview')}
             className={`px-5 py-2 text-xs tracking-widest uppercase transition-colors duration-100 border-b-2 ${tab === 'overview' ? 'border-cobalt text-white' : 'border-transparent text-text-faint hover:text-white'}`}

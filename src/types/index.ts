@@ -56,6 +56,12 @@ export interface SiteSettings {
   logLimit?: number;
   cvUrl?: string;
   linkedinUrl?: string;
+  versionMap?: Record<string, string>;
+  roadmapLabels?: {
+    short: { label: string; timeframe: string };
+    mid: { label: string; timeframe: string };
+    long: { label: string; timeframe: string };
+  };
 }
 
 export interface BuildEntry {

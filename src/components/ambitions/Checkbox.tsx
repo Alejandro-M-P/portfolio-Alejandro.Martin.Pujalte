@@ -13,7 +13,7 @@ export default function Checkbox({ checked, onChange, label }: CheckboxProps) {
       onClick={() => onChange?.(!checked)}
     >
       <div
-        className={`w-4 h-4 flex-shrink-0 border ${
+        className={`w-4 h-4 shrink-0 border ${
           checked ? 'bg-cobalt border-cobalt' : 'bg-transparent border-white/40 group-hover:border-white/70'
         } flex items-center justify-center transition-colors duration-100`}
       >

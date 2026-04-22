@@ -6,15 +6,7 @@ const CACHE_TS_KEY = 'portfolioGitHubLogsTs';
 const PROJECTS_TS_KEY = 'portfolioProjectsRefreshTs';
 const NEXT_SYNC_TS_KEY = 'portfolioNextSyncTs';
 const POLL_MS = 60 * 60 * 1000;
-const GITHUB_TOKEN = import.meta.env.PUBLIC_GITHUB_TOKEN;
-
 const isBrowser = typeof window !== 'undefined';
-
-function ghHeaders(): HeadersInit {
-  const h: Record<string, string> = { Accept: 'application/vnd.github+json' };
-  if (GITHUB_TOKEN) h['Authorization'] = `Bearer ${GITHUB_TOKEN}`;
-  return h;
-}
 
 const levelColors: Record<LogEntry['level'], string> = {
   INFO:      'text-white',
@@ -116,17 +108,21 @@ async function refreshProjectsFromGitHub(): Promise<void> {
       const repoSlug = project.specs?.repoSlug as string;
       if (!repoSlug) return project;
       try {
-        const res = await fetch(`https://api.github.com/repos/${repoSlug}`, { headers: ghHeaders() });
+        const res = await fetch('/api/github', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'getRepoDetails', repoSlug })
+        });
         if (!res.ok) return project;
         const r = await res.json();
         return {
           ...project,
-          pushedAt: r.pushed_at ?? project.pushedAt,
+          pushedAt: r.pushedAt ?? project.pushedAt,
           specs: {
             ...project.specs,
-            stars: String(r.stargazers_count ?? project.specs?.stars ?? ''),
-            language: r.language ?? project.specs?.language ?? '',
-            description: r.description ?? project.specs?.description ?? '',
+            stars: String(r.specsStars ?? project.specs?.stars ?? ''),
+            language: r.specsLanguage ?? project.specs?.language ?? '',
+            description: r.specsDescription ?? project.specs?.description ?? '',
           },
         };
       } catch {
@@ -140,7 +136,7 @@ async function refreshProjectsFromGitHub(): Promise<void> {
   } catch {}
 }
 
-interface LogTerminalProps {
+interface LogStreamProps {
   logs: LogEntry[];
   logLimit?: number;
   hideHeader?: boolean;
@@ -151,7 +147,7 @@ function getActivityLog(): LogEntry[] {
   try { return JSON.parse(localStorage.getItem('portfolioActivityLog') ?? '[]'); } catch { return []; }
 }
 
-export default function LogTerminal({ logs, logLimit = 10, hideHeader = false }: LogTerminalProps) {
+export default function LogStream({ logs, logLimit = 10, hideHeader = false }: LogStreamProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [liveEntries, setLiveEntries]     = useState<LogEntry[]>([]);
   const [activityEntries, setActivityEntries] = useState<LogEntry[]>(getActivityLog());
@@ -165,7 +161,11 @@ export default function LogTerminal({ logs, logLimit = 10, hideHeader = false }:
     return remaining > 0 ? remaining : POLL_MS / 1000;
   };
   
-  const [nextSyncIn, setNextSyncIn] = useState(getInitialTimeLeft());
+  const [nextSyncIn, setNextSyncIn] = useState<number | null>(null);
+
+  useEffect(() => {
+    setNextSyncIn(getInitialTimeLeft());
+  }, []);
 
   async function fetchGitHubActivity(skipCache = false) {
     if (!isBrowser) return;
@@ -184,10 +184,11 @@ export default function LogTerminal({ logs, logLimit = 10, hideHeader = false }:
     const username = getUsername();
     setFetching(true);
     try {
-      const res = await fetch(
-        `https://api.github.com/users/${username}/events/public?per_page=60`,
-        { headers: ghHeaders() }
-      );
+      const res = await fetch('/api/github', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'getActivity', username })
+      });
       if (!res.ok) return;
       const events: Record<string, unknown>[] = await res.json();
 
@@ -314,7 +315,7 @@ export default function LogTerminal({ logs, logLimit = 10, hideHeader = false }:
   }, [combined.length]);
 
   return (
-    <div className={`${hideHeader ? '' : 'border border-white/10 bg-carbono-surface'} w-full flex flex-col h-full overflow-hidden`}>
+    <div className={`${hideHeader ? '' : 'border border-white/10 bg-carbono-surface'} w-full flex flex-col h-full overflow-hidden terminal-scanlines`}>
       {!hideHeader && (
         <div
           className="border-b border-white/10 px-4 py-3 flex items-center gap-3 bg-carbono cursor-pointer hover:bg-carbono/20"
@@ -333,13 +334,13 @@ export default function LogTerminal({ logs, logLimit = 10, hideHeader = false }:
         </div>
       )}
 
-      <div className="px-4 py-1.5 border-b border-white/5 bg-carbono-low flex justify-between items-center">
+      <div className="px-4 py-1.5 border-b border-white/5 bg-carbono-low flex justify-between items-center relative z-20">
         <div className="flex items-center gap-3">
           <span className="text-[12px] text-text-faint tracking-widest uppercase">
             // GH_UPLINK
           </span>
           <span className="text-[12px] text-white/30 tracking-widest font-mono">
-            [ SYNC: {formatTime(nextSyncIn)} ]
+            [ SYNC: {nextSyncIn !== null ? formatTime(nextSyncIn) : '--:--'} ]
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -353,11 +354,11 @@ export default function LogTerminal({ logs, logLimit = 10, hideHeader = false }:
         </div>
       </div>
 
-      <div ref={containerRef} className="overflow-y-auto overflow-x-hidden flex-1 min-h-0 p-3 flex flex-col gap-1 whitespace-normal break-all">
+      <div ref={containerRef} className="overflow-y-auto overflow-x-hidden flex-1 min-h-0 p-3 flex flex-col gap-1 whitespace-normal break-all relative z-20">
         {combined.length === 0 ? (
-          <div className="text-xs text-text-faint tracking-widest">
-            <span>NO RECENT ACTIVITY</span><br />
-            <span className="text-cobalt">Waiting for data stream...</span>
+          <div className="text-xs text-text-faint tracking-widest flex flex-col gap-1">
+            <span>// NO_NEW_ACTIVITY</span>
+            <span className="text-cobalt/60">System idle — awaiting input...</span>
           </div>
         ) : (
           combined.map((entry) => {
@@ -368,7 +369,7 @@ export default function LogTerminal({ logs, logLimit = 10, hideHeader = false }:
             const colorClass = isGold ? 'text-bronze-light' : (isGuest || isCommand ? 'text-[#00ff41]' : levelColors[entry.level]);
 
             return (
-              <div key={entry.id} className={`text-xs leading-relaxed px-2 py-1 ${levelBg[entry.level]}`}>
+              <div key={entry.id} className={`text-xs leading-relaxed px-2 py-1 ${levelBg[entry.level]} crt-flicker`}>
                 <div className="flex items-center gap-2 mb-0.5">
                   <span className="text-text-faint tabular-nums text-[10px] shrink-0">{entry.timestamp}</span>
                   <span className={`font-bold text-[10px] shrink-0 ${colorClass}`}>
@@ -383,7 +384,7 @@ export default function LogTerminal({ logs, logLimit = 10, hideHeader = false }:
       </div>
 
       {/* FIXED FOOTER PART */}
-      <div className="p-3 border-t border-white/5 bg-carbono-low flex flex-col gap-2 shrink-0">
+      <div className="p-3 border-t border-white/5 bg-carbono-low flex flex-col gap-2 shrink-0 relative z-20">
         <div className="flex gap-3 text-xs">
           <span className="text-cobalt">admin @src/data/portfolio.ts ~/ </span>
           <span className="text-white/40 animate-pulse">█</span>

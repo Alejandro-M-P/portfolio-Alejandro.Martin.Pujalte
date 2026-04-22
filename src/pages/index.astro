@@ -3,9 +3,9 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import IdentitySection from '../components/identity/IdentitySection';
 import ProjectGrid from '../components/deployments/ProjectGrid';
 import TechMatrix from '../components/techstack/TechMatrix';
-import LogsPanel from '../components/systemlogs/LogsPanel';
+import CoreConsole from '../components/terminal/CoreConsole';
 import Roadmap from '../components/ambitions/Roadmap';
-import { ambitions } from '../data/portfolio';
+import ambitions from '../../public/data/ambitions.json';
 import identity from '../../public/data/identity.json';
 import logs from '../../public/data/logs.json';
 import settings from '../../public/data/settings.json';
@@ -36,12 +36,20 @@ const totalTech = techStack.length;
     <!-- DESKTOP: 2-column layout -->
     <div class="hidden md:grid md:grid-cols-[420px_1fr] flex-1 min-h-0 gap-3">
       
-      <!-- LEFT: Identity + Terminal -->
+      <!-- LEFT: Identity + Console -->
       <aside class="flex flex-col gap-3 min-h-0">
         <IdentitySection {...identityData} client:idle />
-        <div class="flex-1 min-h-[18rem] border border-white/10 bg-carbono-surface overflow-hidden">
+        <div class="flex-1 min-h-72 border border-white/10 bg-carbono-surface overflow-hidden">
           <div class="h-full overflow-y-auto">
-            <LogsPanel logs={logs} logLimit={settings.logLimit ?? 10} client:idle />
+            <CoreConsole 
+              logs={logs} 
+              logLimit={settings.logLimit ?? 10} 
+              projects={projects}
+              settings={settings}
+              identity={identityData}
+              techStack={techStack}
+              client:idle 
+            />
           </div>
         </div>
       </aside>
@@ -52,14 +60,14 @@ const totalTech = techStack.length;
         <!-- PROJECTS (arriba) -->
         <section class="border border-white/10 bg-carbono-surface p-3 overflow-hidden" style="flex: 1.2">
           <div class="h-full overflow-y-auto">
-            <div className="flex items-center justify-between mb-3 pb-2 border-b border-white/10">
+            <div class="flex items-center justify-between mb-3 pb-2 border-b border-white/10 shrink-0">
               <span class="text-[13px] font-bold text-white tracking-widest">// PROJECTS</span>
             </div>
             <ProjectGrid client:idle />
           </div>
         </section>
 
-        <!-- BOTTOM: Dashboard de M\u00f3dulos -->
+        <!-- BOTTOM: Dashboard de Módulos -->
         <div class="grid grid-cols-3 gap-3 min-h-0" style="flex: 2">
 
           <!-- TechStack -->
@@ -68,11 +76,12 @@ const totalTech = techStack.length;
               <div class="flex items-center justify-between mb-2 pb-2 border-b border-white/10">
                 <span class="text-[13px] font-bold text-white tracking-widest">// TECH_STACK_RECENT</span>
               </div>
+              <div class="text-[10px] text-text-faint tracking-widest uppercase opacity-60 mb-2">// from 5 featured repos (avg)</div>
               <TechMatrix tools={techStack} client:idle />
             </div>
           </section>
 
-          <!-- Roadmap (Ahora con m\u00e1s aire vertical, menos horizontal) -->
+          <!-- Roadmap -->
           <section class="border border-white/10 bg-carbono-surface p-3 overflow-hidden col-span-2">
             <div class="h-full overflow-y-auto">
               <div class="flex items-center justify-between mb-2 pb-2 border-b border-white/10">
@@ -86,7 +95,7 @@ const totalTech = techStack.length;
       
     </div>
 
-    <!-- MOBILE: stacked - same order but compact -->
+    <!-- MOBILE: stacked -->
     <div class="md:hidden flex-1 min-h-0 overflow-y-auto flex flex-col gap-3">
       <IdentitySection {...identityData} client:idle />
       
@@ -95,6 +104,21 @@ const totalTech = techStack.length;
           <span class="text-[13px] font-bold text-white tracking-widest">/// PROJECTS</span>
         </div>
         <ProjectGrid client:idle />
+      </section>
+
+      <section class="border border-white/10 bg-carbono-surface p-3">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-[13px] font-bold text-white tracking-widest">/// TERMINAL</span>
+        </div>
+        <CoreConsole 
+          logs={logs} 
+          logLimit={settings.logLimit ?? 10} 
+          projects={projects}
+          settings={settings}
+          identity={identityData}
+          techStack={techStack}
+          client:idle 
+        />
       </section>
 
       <section class="border border-white/10 bg-carbono-surface p-3">

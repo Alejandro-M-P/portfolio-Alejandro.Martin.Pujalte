@@ -1,12 +1,11 @@
 {
-  "name": "ALEJANDRO.\nMARTIN.PUJALTE",
+  "name": "ALEJANDRO.MARTIN.PUJALTE",
   "handle": "@Alejandro-M-P",
   "bio": "Building structurally honest systems. Skeptical by design, focused on local AI and conceptual rigor.",
-  "quote": "Here in the void. Building the future.",
   "status": "ONLINE",
   "availabilityValue": 100,
   "cvUrl": "/cv.pdf",
-  "linkedinUrl": "",
+  "linkedinUrl": "https://www.linkedin.com/in/alejandro-martin-9a337237b/",
   "links": [
     { "label": "GITHUB →", "href": "https://github.com/Alejandro-M-P" }
   ]

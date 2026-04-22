@@ -1,8 +1,9 @@
+// ADMIN_PANEL_V5_ULTRA_LIGHT_SAAS
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { Project, TechTool, Ambition, Experience, SiteSettings, BuildEntry } from '../../types';
 import { logActivity } from '../../lib/activityLog';
+import { deriveFromProjects } from '../techstack/TechMatrix';
 
-const ADMIN_PASSWORD = import.meta.env.PUBLIC_ADMIN_PASSWORD;
 const SESSION_KEY   = 'admin_session';
 const SESSION_TS    = 'admin_session_ts';
 const ATTEMPTS_KEY  = 'admin_attempts';
@@ -11,9 +12,20 @@ const MAX_ATTEMPTS  = 3;
 const LOCKOUT_MS    = 5 * 60 * 1000;
 const SESSION_TTL   = 30 * 60 * 1000;
 
-async function sha256(text: string): Promise<string> {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+interface GitHubDetails {
+  id: string;
+  name: string;
+  photo: string;
+  specsDescription: string;
+  specsLanguage: string;
+  specsStars: string;
+  specsRepo: string;
+  specsRepoSlug: string;
+  specsStatus: string;
+  pushedAt: string;
+  stack: string;
+  stackWithUsage: { name: string; usageLevel: number }[];
+  architecture: string;
 }
 
 function isSessionValid(): boolean {
@@ -27,14 +39,31 @@ function isSessionValid(): boolean {
   return true;
 }
 
-const inputClass = "bg-transparent border-b border-white/10 px-0 py-2 text-[13px] text-white font-mono w-full focus:outline-none focus:border-cobalt transition-colors duration-100 placeholder:opacity-20";
+/* ─── UI COMPONENTS (LIGHT THEME) ─── */
 
-/* ─── Shared Industrial Components ─── */
+const inputClass = "bg-white border border-slate-200 px-4 py-2.5 text-[14px] text-slate-900 w-full focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all duration-200 placeholder:text-slate-300 rounded-lg shadow-sm";
 
-function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
+function SectionHeader({ title, hint, action }: { title: string; hint?: string; action?: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-1">
-      <label className="text-[10px] text-text-faint tracking-widest uppercase font-bold">// {label}{required && <span className="text-cobalt ml-1">*</span>}</label>
+    <div className="flex flex-col gap-2 mb-8">
+      <div className="flex justify-between items-center">
+        <div className="flex flex-col">
+          <h2 className="text-[18px] text-slate-900 font-bold tracking-tight">{title}</h2>
+          {hint && <p className="text-[12px] text-slate-500 font-medium">{hint}</p>}
+        </div>
+        {action}
+      </div>
+      <div className="h-px bg-slate-100 w-full mt-2" />
+    </div>
+  );
+}
+
+function Field({ label, required, children, className = "" }: { label: string; required?: boolean; children: React.ReactNode; className?: string }) {
+  return (
+    <div className={`flex flex-col gap-1.5 ${className}`}>
+      <label className="text-[12px] text-slate-600 font-bold tracking-tight px-1 uppercase">
+        {label}{required && <span className="text-red-500 ml-1">*</span>}
+      </label>
       {children}
     </div>
   );
@@ -42,10 +71,12 @@ function Field({ label, required, children }: { label: string; required?: boolea
 
 function CheckField({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
   return (
-    <label className="flex items-center gap-3 cursor-pointer select-none group">
-      <div className={`w-3 h-3 border ${value ? 'bg-cobalt border-cobalt' : 'border-white/20 group-hover:border-white/40'} transition-colors`} />
+    <label className="flex items-center gap-3 cursor-pointer select-none group py-2 px-4 bg-slate-50 border border-slate-100 rounded-lg hover:bg-white hover:border-blue-200 transition-all">
+      <div className={`w-5 h-5 rounded-md border-2 ${value ? 'bg-blue-600 border-blue-600 shadow-lg shadow-blue-200' : 'bg-white border-slate-200 group-hover:border-blue-300'} transition-all flex items-center justify-center`}>
+        {value && <span className="text-white text-[12px] font-bold">✓</span>}
+      </div>
       <input type="checkbox" checked={value} onChange={e => onChange(e.target.checked)} className="hidden" />
-      <span className="text-[10px] text-text-muted tracking-widest uppercase group-hover:text-white transition-colors">{label}</span>
+      <span className={`text-[13px] font-semibold transition-colors ${value ? 'text-slate-900' : 'text-slate-500 group-hover:text-slate-700'}`}>{label}</span>
     </label>
   );
 }
@@ -59,63 +90,98 @@ function PasswordGate({ onAuth }: { onAuth: () => void }) {
   const [countdown, setCountdown] = useState(0);
 
   useEffect(() => {
-    const tick = () => {
-      const lockUntil = Number(localStorage.getItem(LOCKOUT_KEY) ?? 0);
-      setCountdown(Math.max(0, Math.ceil((lockUntil - Date.now()) / 1000)));
-    };
-    tick(); const id = setInterval(tick, 1000); return () => clearInterval(id);
+    localStorage.removeItem(LOCKOUT_KEY);
+    localStorage.removeItem(ATTEMPTS_KEY);
+    setCountdown(0);
   }, []);
 
   async function submit(e: React.FormEvent) {
-    e.preventDefault(); if (countdown > 0 || loading) return;
+    e.preventDefault(); if (loading) return;
     setLoading(true);
+    setErr('');
+    
     try {
-      const hash = await sha256(pw);
-      const pwHash = await sha256(ADMIN_PASSWORD ?? '');
-      if (hash === pwHash) {
+      const res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pw.trim() })
+      });
+
+      if (res.ok) {
         localStorage.removeItem(ATTEMPTS_KEY); localStorage.removeItem(LOCKOUT_KEY);
         sessionStorage.setItem(SESSION_KEY, 'true'); sessionStorage.setItem(SESSION_TS, String(Date.now()));
         onAuth();
       } else {
+        const data = await res.json().catch(() => ({ error: 'SERVER_ERROR' }));
         const attempts = Number(localStorage.getItem(ATTEMPTS_KEY) ?? 0) + 1;
         localStorage.setItem(ATTEMPTS_KEY, String(attempts));
+        
         if (attempts >= MAX_ATTEMPTS) {
           localStorage.setItem(LOCKOUT_KEY, String(Date.now() + LOCKOUT_MS));
-          localStorage.setItem(ATTEMPTS_KEY, '0');
           setErr('SYSTEM_LOCKOUT_ENFORCED');
-        } else { setErr(`ACCESS_DENIED: ${MAX_ATTEMPTS - attempts} ATTEMPTS_REMAINING`); }
+          setCountdown(LOCKOUT_MS / 1000);
+        } else { 
+          setErr(data.error === 'INVALID_CREDENTIALS' ? `DENIED: ${MAX_ATTEMPTS - attempts} LEFT` : `ERR: ${data.error}`); 
+        }
         setPw('');
       }
+    } catch (e) {
+      setErr('CONNECTION_FAILURE');
     } finally { setLoading(false); }
   }
+
+  useEffect(() => {
+    if (countdown <= 0) return;
+    const id = setInterval(() => setCountdown(c => Math.max(0, c - 1)), 1000);
+    return () => clearInterval(id);
+  }, [countdown]);
 
   const mins = Math.floor(countdown / 60);
   const secs = String(countdown % 60).padStart(2, '0');
 
   return (
-    <div className="min-h-screen bg-[#0f1117] flex items-start justify-start p-16 font-mono select-none">
-      <div className="flex flex-col gap-12 w-full max-w-2xl border-l border-white/5 pl-12">
-        <div className="flex flex-col gap-3">
-          <p className="text-[12px] text-cobalt tracking-[0.4em] font-bold uppercase">BUNKER_CONSOLE // AUTHORIZATION_REQUIRED</p>
-          <div className="h-px bg-white/5 w-full" />
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 font-sans select-none overflow-hidden relative">
+      <div className="absolute top-0 left-0 w-full h-1/2 bg-blue-600" />
+      
+      <div className="relative flex flex-col gap-10 w-full max-w-md bg-white border border-slate-200 p-12 shadow-[0_20px_50px_rgba(0,0,0,0.1)] rounded-2xl">
+        <div className="flex flex-col gap-2">
+          <h1 className="text-[24px] text-slate-900 font-bold tracking-tight">Core OS Admin</h1>
+          <p className="text-[14px] text-slate-500">Please authenticate to continue.</p>
         </div>
-        <form onSubmit={submit} className="flex flex-col gap-12">
-          <div className="flex flex-col gap-4">
-            <label className="text-[11px] text-text-faint tracking-widest uppercase font-bold">// ACCESS_TOKEN_INPUT</label>
-            <div className="flex items-center gap-4">
-              <span className="text-cobalt text-xl font-bold animate-pulse">$</span>
-              <input type="password" value={pw} onChange={e => setPw(e.target.value)} className="bg-transparent border-none p-0 text-white focus:outline-none w-full text-xl tracking-[0.5em]" placeholder="••••••••" autoFocus disabled={countdown > 0 || loading} />
-            </div>
+        
+        <form onSubmit={submit} className="flex flex-col gap-8">
+          <Field label="Access Password">
+            <input 
+              type="password" 
+              value={pw} 
+              onChange={e => setPw(e.target.value)} 
+              className={inputClass} 
+              placeholder="Enter password..." 
+              autoFocus 
+              disabled={countdown > 0 || loading} 
+            />
+          </Field>
+          
+          <div className="min-h-[20px]">
+            {countdown > 0 ? (
+              <p className="text-[13px] text-red-600 font-bold">Locked: {mins}:{secs} remaining</p>
+            ) : err ? (
+              <p className="text-[13px] text-red-600 font-bold">⚠️ {err}</p>
+            ) : null}
           </div>
-          {countdown > 0 ? (
-            <div className="p-6 border border-err/30 bg-err/5 text-xs text-err tracking-widest leading-relaxed uppercase font-bold">SYSTEM_LOCKOUT: {mins}:{secs} REMAINING</div>
-          ) : err ? (
-            <p className="text-xs text-err tracking-widest animate-pulse uppercase font-bold">// {err}</p>
-          ) : (
-            <p className="text-[11px] text-text-faint tracking-widest italic opacity-30 uppercase">Ready for manual override...</p>
-          )}
-          <button type="submit" disabled={countdown > 0 || loading} className="self-start text-[11px] font-bold tracking-widest uppercase py-4 px-10 border border-white/10 text-white/40 hover:text-cobalt hover:border-cobalt transition-all">{loading ? 'DECRYPTING...' : 'INITIALIZE_ADMIN_BRIDGE \u2192'}</button>
+
+          <button 
+            type="submit" 
+            disabled={countdown > 0 || loading} 
+            className="w-full text-[14px] font-bold py-4 bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 rounded-xl active:scale-[0.98] disabled:opacity-50"
+          >
+            {loading ? 'Authenticating...' : 'Sign In →'}
+          </button>
         </form>
+
+        <div className="flex justify-center items-center opacity-40 pt-4 border-t border-slate-100">
+          <span className="text-[11px] text-slate-500 font-medium">Encrypted V5 Environment</span>
+        </div>
       </div>
     </div>
   );
@@ -126,7 +192,7 @@ function PasswordGate({ onAuth }: { onAuth: () => void }) {
 const emptyProject = {
   id: '', name: '', gitUrl: '', photo: '', video: '', stack: '', architecture: '', initSequence: '', description: '', businessImpact: '',
   specsStatus: '', specsStars: '', specsLanguage: '', specsLicense: '', specsDescription: '', specsRepo: '', specsRepoSlug: '', specsDemo: '', specsTags: '',
-  isHighlighted: false, isPrivate: false, isFavorite: false, pushedAt: '', order: 0
+  isHighlighted: false, isPrivate: false, isFavorite: false, pushedAt: '', order: 0, _stackWithUsage: [] as { name: string; usageLevel: number }[]
 };
 
 function ProjectsTab({ onLog }: { onLog: (msg: string) => void }) {
@@ -134,8 +200,9 @@ function ProjectsTab({ onLog }: { onLog: (msg: string) => void }) {
   const [form, setForm] = useState(emptyProject);
   const [editing, setEditing] = useState<string | null>(null);
   const [scanLoading, setScanLoading] = useState(false);
-  const [privateMode, setPrivateMode] = useState(false);
-  const [manualReadme, setManualReadme] = useState('');
+  const [allRepos, setAllRepos] = useState<{ name: string; fullName: string; description: string; language: string; private: boolean; pushedAt: string; stars: number; url: string; _details: any }[]>([]);
+  const [selectedRepos, setSelectedRepos] = useState<{ name: string; fullName: string; description: string; language: string; private: boolean; pushedAt: string; stars: number; url: string; _details: any }[]>([]);
+  const [loadingRepos, setLoadingRepos] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(() => {
@@ -145,165 +212,317 @@ function ProjectsTab({ onLog }: { onLog: (msg: string) => void }) {
 
   useEffect(() => { load(); }, [load]);
 
-  function parseReadme(raw: string) {
-    const archMatch = raw.match(/#+\s*(architect\w*|structure|design|overview)[^\n]*\n([\s\S]*?)(?=\n#+\s|\n---|\n___|\n\*\*\*|$)/i);
-    const architecture = archMatch ? archMatch[2].replace(/```[\s\S]*?```/g, '').replace(/[#*`]/g, '').trim().slice(0, 400) : '';
-    const techMatches = raw.match(/`([A-Za-z][A-Za-z0-9+#._-]{1,20})`/g) ?? [];
-    const stack = [...new Set(techMatches.map(t => t.replace(/`/g, '').toUpperCase()))].slice(0, 12);
-    return { architecture, stack };
+  useEffect(() => {
+    const cached = localStorage.getItem('portfolioCachedRepos');
+    if (cached) {
+      try { setAllRepos(JSON.parse(cached)); } catch {}
+    }
+  }, []);
+
+  async function loadAllRepos() {
+    setLoadingRepos(true); onLog('FETCHING ALL REPOS...');
+    try {
+      const res = await fetch('/api/github', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'getUserRepos' }) });
+      if (!res.ok) throw new Error(`GH_${res.status}`);
+      const repos = await res.json();
+      onLog(`FETCHING DETAILS FOR ${repos.length} REPOS...`);
+      const detailedRepos = await Promise.all(repos.map(async (repo: any) => {
+        try {
+          const detailRes = await fetch('/api/github', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'getRepoDetails', repoSlug: repo.fullName }) });
+          if (!detailRes.ok) return { ...repo, _details: null };
+          const details = await detailRes.json();
+          return { ...repo, _details: details };
+        } catch { return { ...repo, _details: null }; }
+      }));
+      localStorage.setItem('portfolioCachedRepos', JSON.stringify(detailedRepos));
+      setAllRepos(detailedRepos); setSelectedRepos([]);
+      onLog(`CACHED ${detailedRepos.length} REPOS WITH DETAILS`);
+    } catch (e: any) { onLog(`ERROR: ${e.message}`); }
+    finally { setLoadingRepos(false); }
+  }
+
+  async function importRepo(repo: { fullName: string; name: string; description: string; language: string; private: boolean; pushedAt: string; stars: number; url: string; _details: any }) {
+    const existing = projects.find(p => p.specs?.repoSlug === repo.fullName);
+    if (existing) { onLog('ALREADY IN PORTFOLIO'); return; }
+    const pending = allRepos.filter(r => !projects.some(p => p.specs?.repoSlug === r.fullName));
+    setAllRepos(pending); onLog(`SELECTED: ${repo.name} (${pending.length - 1} pending)`);
+  }
+
+  async function fetchSelectedRepos() {
+    if (selectedRepos.length === 0) return;
+    setScanLoading(true); onLog(`IMPORTING ${selectedRepos.length} REPOS...`);
+    try {
+      const newProjects: Project[] = [];
+      for (const repo of selectedRepos) {
+        const r = repo._details;
+        if (!r) {
+          const res = await fetch('/api/github', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'getRepoDetails', repoSlug: repo.fullName }) });
+          if (!res.ok) continue;
+          const r = await res.json() as GitHubDetails;
+          const stackArr = Array.isArray(r.stack) ? r.stack : r.stack.split(',').map((s: string) => s.trim()).filter(Boolean);
+          newProjects.push({ id: r.id || String(Date.now()), name: r.name, photo: r.photo, stack: stackArr, architecture: r.architecture || '', initSequence: '', description: r.specsDescription || repo.description || '', businessImpact: '', specs: { status: r.specsStatus, stars: String(repo.stars), language: r.specsLanguage, repo: repo.url, repoSlug: repo.fullName, description: r.specsDescription, tags: [], video: '', stackWithUsage: r.stackWithUsage }, isHighlighted: false, isFavorite: false, isPrivate: repo.private, pushedAt: repo.pushedAt, order: projects.length + newProjects.length });
+        } else {
+          const stackArr = Array.isArray(r.stack) ? r.stack : r.stack.split(',').map((s: string) => s.trim()).filter(Boolean);
+          newProjects.push({ id: r.id || String(Date.now()), name: r.name, photo: r.photo, stack: stackArr, architecture: r.architecture || '', initSequence: '', description: r.specsDescription || repo.description || '', businessImpact: '', specs: { status: r.specsStatus, stars: String(repo.stars), language: r.specsLanguage, repo: repo.url, repoSlug: repo.fullName, description: r.specsDescription, tags: [], video: '', stackWithUsage: r.stackWithUsage }, isHighlighted: false, isFavorite: false, isPrivate: repo.private, pushedAt: repo.pushedAt, order: projects.length + newProjects.length });
+        }
+      }
+      const next = [...projects, ...newProjects];
+      localStorage.setItem('portfolioProjects', JSON.stringify(next));
+      setProjects(next); setAllRepos([]); setSelectedRepos([]); onLog(`IMPORTED ${newProjects.length} REPOS`);
+    } catch (e: any) { onLog(`ERROR: ${e.message}`); }
+    finally { setScanLoading(false); }
   }
 
   async function fetchGitHub() {
     const urlMatch = form.gitUrl.trim().match(/github\.com\/([^/]+)\/([^/\s]+)/);
     if (!urlMatch) { onLog('ERROR: INVALID_URL'); return; }
     const repoSlug = `${urlMatch[1]}/${urlMatch[2].replace(/\.git$/, '')}`;
-    setScanLoading(true); onLog(`SCANNING_REPO: ${repoSlug}...`);
+    setScanLoading(true); onLog(`SCANNING: ${repoSlug}`);
     try {
-      const gh = { Accept: 'application/vnd.github+json' };
-      const [repoRes, langsRes, readmeRes] = await Promise.all([
-        fetch(`https://api.github.com/repos/${repoSlug}`, { headers: gh }),
-        fetch(`https://api.github.com/repos/${repoSlug}/languages`, { headers: gh }),
-        fetch(`https://api.github.com/repos/${repoSlug}/readme`, { headers: gh }),
-      ]);
-      if (!repoRes.ok) throw new Error(`GH_${repoRes.status}`);
-      const r = await repoRes.json();
-      const langs = langsRes.ok ? await langsRes.json() : {};
-      let architecture = '';
-      if (readmeRes.ok) {
-        const readmeData = await readmeRes.json();
-        architecture = parseReadme(atob(readmeData.content.replace(/\n/g, ''))).architecture;
-      }
+      const res = await fetch('/api/github', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'getRepoDetails', repoSlug })
+      });
+      if (!res.ok) throw new Error(`GH_${res.status}`);
+      const r = await res.json() as GitHubDetails;
+      const stackArr = Array.isArray(r.stack) ? r.stack : r.stack.split(',').map((s: string) => s.trim()).filter(Boolean);
       setForm(f => ({
-        ...f,
-        id: f.id || r.name.toUpperCase().replace(/-/g, '_'),
-        name: r.name.toUpperCase().replace(/-/g, '_'),
-        photo: f.photo || `https://opengraph.githubassets.com/1/${repoSlug}`,
-        specsDescription: r.description,
-        specsLanguage: r.language,
-        specsStars: String(r.stargazers_count),
-        specsRepo: r.html_url,
-        specsRepoSlug: repoSlug,
-        specsStatus: 'PROD',
-        pushedAt: r.pushed_at,
-        stack: Object.keys(langs).join(', ').toUpperCase()
+        ...f, id: f.id || r.id, name: r.name, photo: f.photo || r.photo,
+        specsDescription: r.specsDescription, specsLanguage: r.specsLanguage, specsStars: r.specsStars,
+        specsRepo: r.specsRepo, specsRepoSlug: r.specsRepoSlug, specsStatus: r.specsStatus,
+        pushedAt: r.pushedAt, stack: stackArr.join(', '), architecture: r.architecture || f.architecture,
+        _stackWithUsage: r.stackWithUsage
       }));
       onLog(`SYNC_SUCCESS: ${repoSlug}`);
-    } catch (e: any) { onLog(`SYNC_FAILED: ${e.message}`); setPrivateMode(true); }
+    } catch (e: any) { onLog(`SYNC_FAILED: ${e.message}`); }
     finally { setScanLoading(false); }
   }
 
   function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]; if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => { setForm(f => ({ ...f, photo: reader.result as string })); onLog(`IMAGE_BUFFERED: ${file.name}`); };
+    reader.onload = () => { setForm(f => ({ ...f, photo: reader.result as string })); onLog(`IMG_READY: ${file.name}`); };
     reader.readAsDataURL(file);
   }
 
   function save() {
     if (!form.name.trim()) { onLog('ERROR: NAME_REQUIRED'); return; }
-    const specs: any = { status: form.specsStatus, stars: form.specsStars, language: form.specsLanguage, license: form.specsLicense, description: form.specsDescription, repo: form.specsRepo, repoSlug: form.specsRepoSlug, demo: form.specsDemo, tags: form.specsTags.split(',').filter(Boolean), video: form.video };
-    const p: Project = { id: form.id || String(Date.now()), name: form.name.toUpperCase(), photo: form.photo, stack: form.stack.split(',').map(s => s.trim().toUpperCase()).filter(Boolean), architecture: form.architecture, initSequence: form.initSequence, description: form.description, businessImpact: form.businessImpact, specs, isHighlighted: form.isHighlighted, isFavorite: form.isFavorite, isPrivate: form.isPrivate, pushedAt: form.pushedAt || undefined, order: Number(form.order) || 0 };
+    const stackArr = form.stack.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+    const specs: any = { 
+      status: form.specsStatus, stars: form.specsStars, language: form.specsLanguage, 
+      license: form.specsLicense, description: form.specsDescription, repo: form.specsRepo, 
+      repoSlug: form.specsRepoSlug, demo: form.specsDemo, tags: form.specsTags.split(',').filter(Boolean).map(t => t.trim()), 
+      video: form.video, 
+      stackWithUsage: form._stackWithUsage || stackArr.map((name: string) => ({ name, usageLevel: 50 }))
+    };
+    const p: Project = { id: form.id || String(Date.now()), name: form.name.toUpperCase(), photo: form.photo, stack: stackArr, architecture: form.architecture, initSequence: form.initSequence, description: form.description, businessImpact: form.businessImpact, specs, isHighlighted: form.isHighlighted, isFavorite: form.isFavorite, isPrivate: form.isPrivate, pushedAt: form.pushedAt || undefined, order: Number(form.order) || 0 };
     const next = editing ? projects.map(x => x.id === editing ? p : x) : [...projects, p];
     localStorage.setItem('portfolioProjects', JSON.stringify(next));
-    setProjects(next); onLog(`MODULE_COMMITTED: ${p.name}`); setEditing(p.id);
+    setProjects(next); onLog(`SAVED: ${p.name}`); setEditing(p.id);
   }
 
   function select(p: Project) {
-    setEditing(p.id); onLog(`SELECT: ${p.id}`);
-    setForm({ ...emptyProject, id: p.id, name: p.name, photo: p.photo, video: (p.specs?.video as string) || '', stack: p.stack.join(', '), architecture: p.architecture, initSequence: p.initSequence, description: p.description ?? '', businessImpact: p.businessImpact ?? '', specsStatus: (p.specs?.status as string) || '', specsStars: (p.specs?.stars as string) || '', specsLanguage: (p.specs?.language as string) || '', specsLicense: (p.specs?.license as string) || '', specsDescription: (p.specs?.description as string) || '', specsRepo: (p.specs?.repo as string) || '', specsRepoSlug: (p.specs?.repoSlug as string) || '', specsDemo: (p.specs?.demo as string) || '', specsTags: Array.isArray(p.specs?.tags) ? p.specs.tags.join(', ') : '', isHighlighted: !!p.isHighlighted, isFavorite: !!p.isFavorite, isPrivate: !!p.isPrivate, pushedAt: p.pushedAt || '', order: p.order || 0 });
+    setEditing(p.id); onLog(`SELECTED: ${p.name}`);
+    const stackWithUsage = p.specs?.stackWithUsage as { name: string; usageLevel: number }[] | undefined;
+    setForm({ 
+      ...emptyProject, id: p.id, name: p.name, photo: p.photo, video: (p.specs?.video as string) || '', 
+      stack: p.stack.join(', '), architecture: p.architecture, initSequence: p.initSequence, 
+      description: p.description ?? '', businessImpact: p.businessImpact ?? '', 
+      specsStatus: (p.specs?.status as string) || '', specsStars: (p.specs?.stars as string) || '', 
+      specsLanguage: (p.specs?.language as string) || '', specsLicense: (p.specs?.license as string) || '', 
+      specsDescription: (p.specs?.description as string) || '', specsRepo: (p.specs?.repo as string) || '', 
+      specsRepoSlug: (p.specs?.repoSlug as string) || '', specsDemo: (p.specs?.demo as string) || '', 
+      specsTags: Array.isArray(p.specs?.tags) ? p.specs.tags.join(', ') : '', 
+      isHighlighted: !!p.isHighlighted, isFavorite: !!p.isFavorite, isPrivate: !!p.isPrivate, 
+      pushedAt: p.pushedAt || '', order: p.order || 0,
+      _stackWithUsage: stackWithUsage || []
+    });
   }
 
   return (
-    <div className="flex flex-col gap-12">
-      <div className="flex flex-col gap-6">
-        <header className="flex justify-between items-center border-b border-white/5 pb-3">
-          <p className="text-[11px] text-cobalt tracking-widest font-bold uppercase">// MODULE_REPOSITORY</p>
-          <button onClick={() => { setEditing(null); setForm(emptyProject); onLog('MODE: INITIALIZE'); }} className="text-[10px] text-white/40 hover:text-white tracking-widest">[+] NEW_MODULE</button>
-        </header>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+    <div className="flex flex-col gap-10">
+      <section className="bg-white border border-slate-200 p-10 rounded-2xl shadow-sm">
+        <SectionHeader 
+          title="Module Library" 
+          hint="All registered portfolio modules"
+          action={<div className="flex gap-2">
+            <button onClick={loadAllRepos} disabled={loadingRepos} className="text-[13px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50 px-4 py-2 rounded-lg transition-colors">{loadingRepos ? 'Loading...' : 'Load All Repos'}</button>
+            <button onClick={() => { setEditing(null); setForm(emptyProject); onLog('INIT: NEW_MODULE'); }} className="text-[13px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50 px-4 py-2 rounded-lg transition-colors">Create New</button>
+          </div>}
+        />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {projects.map(p => (
-            <div key={p.id} onClick={() => select(p)} className={`p-5 border transition-all cursor-pointer ${editing === p.id ? 'border-cobalt bg-cobalt/5' : 'border-white/5 hover:border-white/20 bg-white/[0.01]'}`}>
-              <p className="text-[11px] font-bold text-white mb-1 uppercase truncate">{p.name}</p>
-              <div className="flex justify-between items-center opacity-30">
-                <p className="text-[9px] text-text-faint tracking-widest uppercase">{p.id}</p>
-                {p.isFavorite && <span className="text-bronze text-[10px]">★</span>}
+            <div key={p.id} onClick={() => select(p)} className={`group p-6 rounded-xl border-2 transition-all cursor-pointer ${editing === p.id ? 'border-blue-500 bg-blue-50' : 'border-slate-50 bg-slate-50 hover:border-slate-200 hover:bg-white'}`}>
+              <div className="flex justify-between items-start mb-2">
+                <p className={`text-[13px] font-bold uppercase truncate ${editing === p.id ? 'text-blue-700' : 'text-slate-900'}`}>{p.name}</p>
+                {p.isFavorite && <span className="text-amber-500 text-[14px]">★</span>}
               </div>
+              <p className="text-[11px] text-slate-500 font-mono font-bold tracking-tight">{p.specs?.repoSlug || '-'}</p>
             </div>
           ))}
         </div>
-      </div>
+      </section>
 
-      <div className="bg-white/[0.01] border border-white/5 p-12 relative">
-        <div className="absolute top-0 left-0 w-1.5 h-full bg-cobalt/20" />
-        <p className="text-[12px] text-white tracking-[0.3em] font-bold uppercase mb-10">// {editing ? `TERMINAL_CONFIG: ${editing}` : 'INITIALIZING_DATA'}</p>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-20 gap-y-10">
-          <Field label="ID" required><input value={form.id} onChange={e => setForm(f => ({ ...f, id: e.target.value }))} className={inputClass} placeholder="01_CORE" /></Field>
-          <Field label="NAME" required><input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className={inputClass} placeholder="SYSTEM_MODULE" /></Field>
-          
-          <div className="col-span-2 flex gap-6">
-            <div className="flex-1"><Field label="GITHUB_ENDPOINT"><input value={form.gitUrl} onChange={e => setForm(f => ({ ...f, gitUrl: e.target.value }))} className={inputClass} placeholder="https://github.com/..." /></Field></div>
-            <button onClick={fetchGitHub} disabled={scanLoading} className="self-end px-8 py-3 border border-cobalt/40 text-cobalt text-[11px] font-bold tracking-widest hover:bg-cobalt/10 uppercase transition-all">{scanLoading ? 'SCANNING...' : 'SYNC_METADATA'}</button>
-          </div>
-
-          {privateMode && (
-            <div className="col-span-2 border border-warn/30 bg-warn/5 p-6 space-y-4">
-              <p className="text-[10px] text-warn tracking-widest font-bold uppercase">// MANUAL_PARSING_MODE</p>
-              <textarea value={manualReadme} onChange={e => setManualReadme(e.target.value)} className={`${inputClass} h-32 border-white/5 bg-black/20 p-4`} placeholder="Paste README.md here for manual metadata extraction..." />
-              <button onClick={() => { const { architecture, stack } = parseReadme(manualReadme); setForm(f => ({ ...f, architecture, stack: stack.join(', ') })); onLog('README_PARSED'); }} className="px-6 py-2 border border-warn/40 text-warn text-[10px] font-bold tracking-widest hover:bg-warn/10 uppercase transition-all">EXEC_PARSE_BUFFER</button>
-            </div>
-          )}
-
-          <div className="col-span-2 bg-[#080808] border border-white/5 p-6 flex flex-wrap gap-12">
-            <CheckField label="HIGH_VALUE (ORO)" value={form.isHighlighted} onChange={v => setForm(f => ({ ...f, isHighlighted: v }))} />
-            <CheckField label="PINNED (FAVORITO)" value={form.isFavorite} onChange={v => setForm(f => ({ ...f, isFavorite: v }))} />
-            <CheckField label="REDACTED (PRIVADO)" value={form.isPrivate} onChange={v => setForm(f => ({ ...f, isPrivate: v }))} />
-          </div>
-
-          <Field label="OVERVIEW_BRIEF"><input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} className={inputClass} /></Field>
-          <Field label="BUSINESS_IMPACT"><input value={form.businessImpact} onChange={e => setForm(f => ({ ...f, businessImpact: e.target.value }))} className={inputClass} /></Field>
-          
-          <div className="col-span-2 grid grid-cols-2 gap-10 border-t border-white/5 pt-10">
-            <div className="space-y-4">
-              <Field label="VISUAL_ASSET [IMG]">
-                <div className="flex gap-2">
-                  <input value={form.photo} onChange={e => setForm(f => ({ ...f, photo: e.target.value }))} className={`${inputClass} flex-1`} />
-                  <button onClick={() => photoInputRef.current?.click()} className="px-4 py-1 border border-white/10 text-white/40 text-[10px] hover:text-white uppercase transition-all">↑</button>
-                  <input ref={photoInputRef} type="file" className="hidden" onChange={handlePhotoUpload} />
+      {allRepos.length > 0 && (
+        <section className="bg-white border border-slate-200 p-10 rounded-2xl shadow-sm">
+          <SectionHeader 
+            title="Import from GitHub" 
+            hint={`${allRepos.length} repos found · ${selectedRepos.length} selected`}
+            action={selectedRepos.length > 0 && (
+              <button onClick={fetchSelectedRepos} disabled={scanLoading} className="text-[13px] font-bold text-white bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg transition-colors">
+                {scanLoading ? 'Importing...' : `Import ${selectedRepos.length} Selected`}
+              </button>
+            )}
+          />
+          <div className="max-h-80 overflow-y-auto space-y-2">
+            {allRepos.map(repo => {
+              const already = projects.some(p => p.specs?.repoSlug === repo.fullName);
+              const isSelected = selectedRepos.some(r => r.fullName === repo.fullName);
+              return (
+                <div key={repo.fullName} onClick={() => { if (already) return; setSelectedRepos(isSelected ? selectedRepos.filter(r => r.fullName !== repo.fullName) : [...selectedRepos, repo]); }} className={`flex items-center gap-4 p-4 rounded-lg border transition-all cursor-pointer ${already ? 'bg-slate-50 border-slate-100 opacity-50' : isSelected ? 'bg-green-50 border-green-300' : 'bg-slate-50 border-slate-100 hover:border-slate-200'}`}>
+                  <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 ${already ? 'bg-slate-200 border-slate-300' : isSelected ? 'bg-green-600 border-green-600' : 'border-slate-300'}`}>
+                    {isSelected && <span className="text-white text-[12px] font-bold">✓</span>}
+                  </div>
+                  {repo._details?.photo && <img src={repo._details.photo} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0 border border-slate-200" />}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-[14px] font-bold text-slate-900 truncate">{repo.name}</p>
+                      {repo.private && <span className="text-[10px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded">PRIVATE</span>}
+                    </div>
+                    <p className="text-[12px] text-slate-500 truncate">{repo.description || repo._details?.specsDescription || 'No description'}</p>
+                    <p className="text-[10px] text-cobalt mt-1">{repo._details?.stack?.join(', ') || repo.language || '-'}</p>
+                  </div>
                 </div>
-              </Field>
-              {form.photo && <div className="border border-white/10 p-2 bg-[#080808]"><img src={form.photo} className="h-32 w-full object-cover opacity-60" /></div>}
-            </div>
-            <div className="space-y-4">
-              <Field label="STREAM_SOURCE [VIDEO]"><input value={form.video} onChange={e => setForm(f => ({ ...f, video: e.target.value }))} className={inputClass} /></Field>
-              {form.video && <div className="border border-white/10 p-2 bg-[#080808] h-32 flex items-center justify-center"><p className="text-[9px] text-cobalt tracking-widest font-bold uppercase animate-pulse">● SIGNAL_ESTABLISHED</p></div>}
-            </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      <section className="bg-white border border-slate-200 p-10 rounded-2xl shadow-sm">
+        <SectionHeader title={editing ? `Editing: ${projects.find(p => p.id === editing)?.name || editing}` : 'Create New Module'} />
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8">
+          <Field label="Module Name" required><input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className={inputClass} placeholder="e.g., SYSTEM_X" /></Field>
+          
+          <div className="col-span-2 flex gap-4">
+            <Field label="GitHub URL" className="flex-1"><input value={form.gitUrl} onChange={e => setForm(f => ({ ...f, gitUrl: e.target.value }))} className={inputClass} placeholder="https://github.com/..." /></Field>
+            <button onClick={fetchGitHub} disabled={scanLoading} className="self-end h-[46px] px-8 bg-blue-600 text-white text-[13px] font-bold rounded-lg hover:bg-blue-700 transition-all shadow-md shadow-blue-100 disabled:opacity-50">
+              {scanLoading ? 'Syncing...' : 'Fetch Info'}
+            </button>
           </div>
 
-          <div className="col-span-2"><Field label="SYSTEM_ARCHITECTURE"><textarea value={form.architecture} onChange={e => setForm(f => ({ ...f, architecture: e.target.value }))} className={`${inputClass} h-24 resize-none`} /></Field></div>
-          <div className="col-span-2"><Field label="INIT_SEQUENCE"><textarea value={form.initSequence} onChange={e => setForm(f => ({ ...f, initSequence: e.target.value }))} className={`${inputClass} h-16 resize-none`} /></Field></div>
+          <div className="col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-6 bg-slate-50 p-6 rounded-xl border border-slate-100">
+            <CheckField label="High Value" value={form.isHighlighted} onChange={v => setForm(f => ({ ...f, isHighlighted: v }))} />
+            <CheckField label="Favorite" value={form.isFavorite} onChange={v => setForm(f => ({ ...f, isFavorite: v }))} />
+            <CheckField label="Private" value={form.isPrivate} onChange={v => setForm(f => ({ ...f, isPrivate: v }))} />
+          </div>
 
-          <Field label="TECH_STACK (CSV)"><input value={form.stack} onChange={e => setForm(f => ({ ...f, stack: e.target.value }))} className={inputClass} /></Field>
-          <Field label="STATUS">
+          <Field label="Short Overview"><input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} className={inputClass} /></Field>
+          <Field label="Business Impact"><input value={form.businessImpact} onChange={e => setForm(f => ({ ...f, businessImpact: e.target.value }))} className={inputClass} /></Field>
+          
+          <div className="col-span-2 grid grid-cols-1 md:grid-cols-2 gap-10 border-t border-slate-100 pt-8 mt-4">
+            <Field label="Image Asset">
+              <div className="flex gap-2 mb-3">
+                <input value={form.photo} onChange={e => setForm(f => ({ ...f, photo: e.target.value }))} className={`${inputClass} flex-1`} />
+                <button onClick={() => photoInputRef.current?.click()} className="px-4 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-all font-bold">↑</button>
+                <input ref={photoInputRef} type="file" className="hidden" onChange={handlePhotoUpload} />
+              </div>
+              {form.photo && <img src={form.photo} className="aspect-video w-full object-cover rounded-xl border border-slate-200 shadow-sm" />}
+            </Field>
+            <Field label="Video Link">
+              <input value={form.video} onChange={e => setForm(f => ({ ...f, video: e.target.value }))} className={`${inputClass} mb-3`} />
+              {form.video ? (
+                <div className="aspect-video bg-blue-50 border border-blue-100 rounded-xl flex items-center justify-center">
+                  <span className="text-blue-600 font-bold text-[13px] animate-pulse">✓ Signal Active</span>
+                </div>
+              ) : <div className="aspect-video bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl" />}
+            </Field>
+          </div>
+
+          <div className="col-span-2"><Field label="Architecture Logic"><textarea value={form.architecture} onChange={e => setForm(f => ({ ...f, architecture: e.target.value }))} className={`${inputClass} h-32 resize-none leading-relaxed py-4`} /></Field></div>
+          <div className="col-span-2"><Field label="Init Sequence"><textarea value={form.initSequence} onChange={e => setForm(f => ({ ...f, initSequence: e.target.value }))} className={`${inputClass} h-20 resize-none leading-relaxed py-4`} /></Field></div>
+
+          <Field label="Stack (Comma separated)"><input value={form.stack} onChange={e => setForm(f => ({ ...f, stack: e.target.value }))} className={inputClass} placeholder="REACT, GO, etc." /></Field>
+          <Field label="Status">
             <select value={form.specsStatus} onChange={e => setForm(f => ({ ...f, specsStatus: e.target.value }))} className={inputClass}>
-              <option value="">— SELECT_STATUS —</option>
-              <option value="IN_PROGRESS">IN_PROGRESS</option>
-              <option value="COMPLETED">COMPLETED</option>
-              <option value="PAUSED">PAUSED</option>
-              <option value="ARCHIVED">ARCHIVED</option>
+              <option value="">Select Status</option>
+              <option value="IN_PROGRESS">In Progress</option>
+              <option value="COMPLETED">Completed</option>
+              <option value="PAUSED">Paused</option>
+              <option value="ARCHIVED">Archived</option>
             </select>
           </Field>
-          <Field label="STARS"><input value={form.specsStars} onChange={e => setForm(f => ({ ...f, specsStars: e.target.value }))} className={inputClass} /></Field>
-          <Field label="LANGUAGE"><input value={form.specsLanguage} onChange={e => setForm(f => ({ ...f, specsLanguage: e.target.value }))} className={inputClass} /></Field>
-          <Field label="LICENSE"><input value={form.specsLicense} onChange={e => setForm(f => ({ ...f, specsLicense: e.target.value }))} className={inputClass} /></Field>
-          <Field label="REPO_SLUG"><input value={form.specsRepoSlug} onChange={e => setForm(f => ({ ...f, specsRepoSlug: e.target.value }))} className={inputClass} /></Field>
         </div>
 
-        <div className="mt-12 flex items-center gap-10">
-          <button onClick={save} className="bg-cobalt text-white text-[11px] font-bold tracking-[0.3em] uppercase px-12 py-5 hover:bg-cobalt-light transition-all shadow-[0_0_30px_rgba(0,85,255,0.2)]">COMMIT_CHANGES [CTRL+S]</button>
-          {editing && <button onClick={() => { if(confirm('DECOMMISSION?')) { const n = projects.filter(x => x.id !== editing); localStorage.setItem('portfolioProjects', JSON.stringify(n)); load(); setEditing(null); onLog(`REMOVED: ${editing}`); } }} className="text-[10px] text-err/50 hover:text-err tracking-widest uppercase">DECOMMISSION</button>}
+        <div className="mt-12 flex items-center gap-6">
+          <button onClick={save} className="bg-blue-600 text-white text-[14px] font-bold px-12 py-4 rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 active:scale-95">Save Module</button>
+          {editing && <button onClick={() => { if(confirm('Delete module?')) { const n = projects.filter(x => x.id !== editing); localStorage.setItem('portfolioProjects', JSON.stringify(n)); load(); setEditing(null); onLog(`REMOVED: ${editing}`); } }} className="text-[13px] text-red-500 font-bold hover:underline">Delete Forever</button>}
         </div>
-      </div>
+      </section>
+    </div>
+  );
+}
+
+/* ─── Identity Tab ─── */
+
+function IdentityTab({ onLog }: { onLog: (msg: string) => void }) {
+  const [data, setData] = useState({
+    name: '', handle: '', bio: '', location: '', githubUrl: '', linkedinUrl: '', twitterUrl: '', email: '', status: 'ONLINE', availabilityValue: 99.9, photo: ''
+  });
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const s = localStorage.getItem('portfolioIdentity');
+    if (s) setData(JSON.parse(s));
+  }, []);
+
+  function update(partial: Partial<typeof data>) {
+    const next = { ...data, ...partial }; setData(next);
+    localStorage.setItem('portfolioIdentity', JSON.stringify(next));
+    onLog(`IDENTITY_PARAM: ${Object.keys(partial)[0].toUpperCase()}`);
+  }
+
+  function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => { update({ photo: reader.result as string }); onLog(`PHOTO_BUFFERED: ${file.name}`); };
+    reader.readAsDataURL(file);
+  }
+
+  return (
+    <div className="flex flex-col gap-10">
+      <section className="bg-white border border-slate-200 p-10 rounded-2xl shadow-sm">
+        <SectionHeader title="Core Identity" hint="Personal branding and global identifiers" />
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8">
+          <Field label="Full Name"><input value={data.name} onChange={e => update({ name: e.target.value })} className={inputClass} /></Field>
+          <Field label="Handle / ID"><input value={data.handle} onChange={e => update({ handle: e.target.value })} className={inputClass} /></Field>
+          <div className="col-span-2"><Field label="Professional Bio"><textarea value={data.bio} onChange={e => update({ bio: e.target.value })} className={`${inputClass} h-24 resize-none leading-relaxed py-4`} /></Field></div>
+          
+          <div className="col-span-2 grid grid-cols-2 gap-10">
+            <Field label="Profile Photo">
+              <div className="flex gap-2 mb-3">
+                <input value={data.photo} onChange={e => update({ photo: e.target.value })} className={`${inputClass} flex-1`} />
+                <button onClick={() => photoInputRef.current?.click()} className="px-4 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-all font-bold">↑</button>
+                <input ref={photoInputRef} type="file" className="hidden" onChange={handlePhotoUpload} />
+              </div>
+              {data.photo && <img src={data.photo} className="w-32 h-32 rounded-full object-cover border-4 border-slate-50 shadow-md" />}
+            </Field>
+            <div className="space-y-6">
+              <Field label="Location"><input value={data.location} onChange={e => update({ location: e.target.value })} className={inputClass} /></Field>
+              <Field label="Contact Email"><input value={data.email} onChange={e => update({ email: e.target.value })} className={inputClass} /></Field>
+            </div>
+          </div>
+
+          <div className="col-span-2 border-t border-slate-100 pt-10 mt-4 grid grid-cols-1 md:grid-cols-3 gap-8">
+            <Field label="GitHub URL"><input value={data.githubUrl} onChange={e => update({ githubUrl: e.target.value })} className={inputClass} /></Field>
+            <Field label="LinkedIn URL"><input value={data.linkedinUrl} onChange={e => update({ linkedinUrl: e.target.value })} className={inputClass} /></Field>
+            <Field label="Twitter URL"><input value={data.twitterUrl} onChange={e => update({ twitterUrl: e.target.value })} className={inputClass} /></Field>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
@@ -321,18 +540,16 @@ function TechTab({ onLog }: { onLog: (msg: string) => void }) {
 
   async function scanAll() {
     const s = localStorage.getItem('portfolioProjects'); if (!s) return;
+    const settingsS = localStorage.getItem('portfolioSettings');
+    let versionMap: Record<string, string> = {};
+    try { if (settingsS) { const settings = JSON.parse(settingsS); versionMap = settings.versionMap || {}; } } catch {}
+    
     const projects = JSON.parse(s) as Project[];
-    const slugs = projects.map(p => p.specs?.repoSlug as string).filter(Boolean);
-    setLoading(true); onLog(`SCANNING_${slugs.length}_REPOS...`);
+    setLoading(true); onLog(`SCANNING FROM TOP 5...`);
     try {
-      const results = await Promise.all(slugs.map(slug => fetch(`https://api.github.com/repos/${slug}/languages`, { headers: { Accept: 'application/vnd.github+json' } }).then(r => r.ok ? r.json() : {})));
-      const totals: Record<string, number> = {};
-      for (const langs of results) { for (const [l, v] of Object.entries(langs as any)) totals[l] = (totals[l] || 0) + (v as number); }
-      const sorted = Object.entries(totals).sort((a, b) => b[1] - a[1]);
-      const max = sorted[0]?.[1] || 1;
-      const derived = sorted.map(([n, v]) => ({ name: n.toUpperCase(), version: '', usageLevel: Math.round((v/max) * 100) }));
+      const derived = deriveFromProjects(projects, versionMap);
       setTools(derived); localStorage.setItem('portfolioTechstack', JSON.stringify(derived));
-      onLog(`SCAN_COMPLETE: ${sorted.length} MODULES DETECTED`);
+      onLog(`SCAN DONE: ${derived.length} TOOLS FOUND`);
     } catch (e: any) { onLog(`SCAN_ERROR: ${e.message}`); }
     finally { setLoading(false); }
   }
@@ -342,36 +559,49 @@ function TechTab({ onLog }: { onLog: (msg: string) => void }) {
     const tool = { ...form, name: form.name.toUpperCase() };
     const next = editing !== null ? tools.map((t, i) => i === editing ? tool : t) : [...tools, tool];
     setTools(next); localStorage.setItem('portfolioTechstack', JSON.stringify(next));
-    setForm({ name: '', version: '', usageLevel: 80 }); setEditing(null); onLog(`TECH_SAVED: ${tool.name}`);
+    setForm({ name: '', version: '', usageLevel: 80 }); setEditing(null); onLog(`TECH SAVED: ${tool.name}`);
   }
 
   return (
     <div className="flex flex-col gap-10">
-      <header className="flex justify-between items-center border-b border-white/5 pb-3">
-        <p className="text-[11px] text-cobalt tracking-widest font-bold uppercase">// TECH_MATRIX_REGISTRY</p>
-        <button onClick={scanAll} disabled={loading} className="text-[10px] text-cobalt hover:underline uppercase transition-all tracking-widest">{loading ? 'SCANNING_GITHUB...' : '[REFRESH_FROM_GITHUB]'}</button>
-      </header>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {tools.map((t, i) => (
-          <div key={t.name} onClick={() => { setEditing(i); setForm(t); }} className={`p-6 border transition-all cursor-pointer ${editing === i ? 'border-cobalt bg-cobalt/5' : 'border-white/5 bg-white/[0.01] hover:border-white/20'}`}>
-            <div className="flex justify-between items-center mb-4">
-              <p className="text-[12px] font-bold text-white uppercase">{t.name}</p>
-              <span className="text-[11px] text-cobalt font-bold">{t.usageLevel}%</span>
+      <section className="bg-white border border-slate-200 p-10 rounded-2xl shadow-sm">
+<SectionHeader 
+            title="Technology Registry" 
+            hint="Master stack across all projects" 
+            action={<button onClick={scanAll} disabled={loading} className="text-[13px] font-bold text-blue-600 px-4 py-2 bg-blue-50 rounded-lg hover:bg-blue-100 transition-all">{loading ? 'Calculating...' : 'Recalculate'}</button>}
+          />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {tools.length === 0 && (
+            <div className="col-span-3 py-12 text-center border-2 border-dashed border-slate-100 rounded-2xl">
+              <p className="text-slate-400 font-medium italic">No technology modules registered...</p>
             </div>
-            <div className="h-1 bg-white/5 w-full"><div className="h-full bg-cobalt transition-all" style={{ width: `${t.usageLevel}%` }} /></div>
-          </div>
-        ))}
-      </div>
-      <div className="bg-white/[0.01] border border-white/5 p-10 space-y-8">
-        <p className="text-[11px] text-white tracking-widest font-bold uppercase">// {editing !== null ? 'UPDATE_TOOL' : 'ADD_NEW_TOOL'}</p>
-        <div className="grid grid-cols-3 gap-8">
-          <Field label="NAME"><input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className={inputClass} /></Field>
-          <Field label="VERSION"><input value={form.version} onChange={e => setForm(f => ({ ...f, version: e.target.value }))} className={inputClass} /></Field>
-          <Field label="USAGE_%"><input type="number" value={form.usageLevel} onChange={e => setForm(f => ({ ...f, usageLevel: Number(e.target.value) }))} className={inputClass} /></Field>
+          )}
+          {tools.map((t, i) => (
+            <div key={t.name + i} onClick={() => { setEditing(i); setForm(t); }} className={`p-8 bg-slate-50 border-2 rounded-xl transition-all cursor-pointer group ${editing === i ? 'border-blue-500 bg-blue-50' : 'border-transparent hover:border-slate-200 hover:bg-white'}`}>
+              <div className="flex justify-between items-center mb-4">
+                <p className={`text-[15px] font-bold ${editing === i ? 'text-blue-700' : 'text-slate-900'}`}>{t.name}</p>
+                <span className="text-[12px] font-bold text-blue-600">{t.usageLevel}%</span>
+              </div>
+              <div className="h-2 bg-slate-200 w-full rounded-full overflow-hidden">
+                <div className="h-full bg-blue-600 transition-all duration-1000" style={{ width: `${t.usageLevel}%` }} />
+              </div>
+            </div>
+          ))}
         </div>
-        <div className="flex gap-4"><button onClick={save} className="px-8 py-3 bg-cobalt text-white text-[10px] font-bold uppercase tracking-widest">SAVE_TOOL</button>
-        {editing !== null && <button onClick={() => { setTools(tools.filter((_, i) => i !== editing)); setEditing(null); setForm({ name: '', version: '', usageLevel: 80 }); }} className="text-err text-[10px] font-bold uppercase tracking-widest ml-auto">DELETE</button>}</div>
-      </div>
+      </section>
+
+      <section className="bg-white border border-slate-200 p-10 rounded-2xl shadow-sm">
+        <h3 className="text-[16px] font-bold text-slate-800 mb-8">{editing !== null ? 'Modify Technology' : 'Register New Tool'}</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
+          <Field label="Name"><input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className={inputClass} /></Field>
+          <Field label="Version"><input value={form.version} onChange={e => setForm(f => ({ ...f, version: e.target.value }))} className={inputClass} /></Field>
+          <Field label="Usage (%)"><input type="number" value={form.usageLevel} onChange={e => setForm(f => ({ ...f, usageLevel: Number(e.target.value) }))} className={inputClass} /></Field>
+        </div>
+        <div className="mt-10 flex gap-4">
+          <button onClick={save} className="px-10 py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-all shadow-md shadow-blue-100">Save Tool</button>
+          {editing !== null && <button onClick={() => { setTools(tools.filter((_, i) => i !== editing)); setEditing(null); setForm({ name: '', version: '', usageLevel: 80 }); }} className="text-red-500 font-bold ml-auto px-4 py-2 hover:bg-red-50 rounded-lg transition-all">Delete</button>}
+        </div>
+      </section>
     </div>
   );
 }
@@ -396,27 +626,41 @@ function AmbitionsTab({ onLog }: { onLog: (msg: string) => void }) {
 
   return (
     <div className="flex flex-col gap-10">
-      <header className="border-b border-white/5 pb-3"><p className="text-[11px] text-cobalt tracking-widest font-bold uppercase">// STRATEGIC_ROADMAP</p></header>
+      <SectionHeader title="Strategic Roadmap" hint="Vision and future developments" />
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {['short', 'mid', 'long'].map(sec => (
-          <div key={sec} className="bg-white/[0.01] border border-white/5 p-6 flex flex-col gap-4">
-            <p className="text-[10px] text-cobalt font-bold tracking-widest uppercase">{sec}_TERM</p>
-            <div className="flex flex-col gap-2">
+          <div key={sec} className="bg-white border border-slate-200 p-8 rounded-2xl shadow-sm flex flex-col gap-6">
+            <h4 className="text-[12px] font-bold text-blue-600 uppercase tracking-widest">{sec} term</h4>
+            <div className="flex flex-col gap-3 min-h-[100px]">
               {items.filter(i => i.section === sec).map(i => (
-                <div key={i.id} onClick={() => { setEditing(i.id); setForm({ text: i.text, section: i.section }); }} className="text-[11px] text-text-muted hover:text-white cursor-pointer transition-colors p-2 border border-transparent hover:border-white/5 hover:bg-white/[0.02] flex items-start gap-2"><span className="text-cobalt opacity-40">\u25b8</span> {i.text}</div>
+                <div key={i.id} onClick={() => { setEditing(i.id); setForm({ text: i.text, section: i.section }); }} className="text-[13px] text-slate-600 hover:text-blue-600 hover:bg-blue-50 cursor-pointer transition-all p-3 rounded-lg border border-transparent hover:border-blue-100 flex items-start gap-3 group">
+                  <span className="text-blue-400 mt-1.5 w-1.5 h-1.5 rounded-full bg-blue-400 group-hover:scale-125 transition-transform" /> 
+                  <span className="flex-1">{i.text}</span>
+                </div>
               ))}
+              {items.filter(i => i.section === sec).length === 0 && (
+                <div className="h-full flex items-center justify-center border-2 border-dashed border-slate-50 rounded-xl py-8">
+                  <p className="text-[11px] text-slate-300 font-bold uppercase tracking-widest">No goals set</p>
+                </div>
+              )}
             </div>
           </div>
         ))}
       </div>
-      <div className="bg-white/[0.01] border border-white/5 p-10 space-y-8">
-        <p className="text-[11px] text-white font-bold uppercase">// {editing ? 'EDIT_OBJECTIVE' : 'ADD_OBJECTIVE'}</p>
+      <section className="bg-white border border-slate-200 p-10 rounded-2xl shadow-sm">
+        <h3 className="text-[16px] font-bold text-slate-800 mb-8">{editing ? 'Edit Goal' : 'Add Strategic Goal'}</h3>
         <div className="flex gap-8">
-          <div className="flex-1"><Field label="GOAL_DESCRIPTION"><input value={form.text} onChange={e => setForm(f => ({ ...f, text: e.target.value }))} className={inputClass} /></Field></div>
-          <div className="w-48"><Field label="TIMEFRAME"><select value={form.section} onChange={e => setForm(f => ({ ...f, section: e.target.value as any }))} className={inputClass}><option value="short">SHORT</option><option value="mid">MID</option><option value="long">LONG</option></select></Field></div>
+          <Field label="Goal Description" className="flex-1"><input value={form.text} onChange={e => setForm(f => ({ ...f, text: e.target.value }))} className={inputClass} /></Field>
+          <Field label="Timeframe" className="w-64">
+            <select value={form.section} onChange={e => setForm(f => ({ ...f, section: e.target.value as any }))} className={inputClass}>
+              <option value="short">Short Term</option>
+              <option value="mid">Mid Term</option>
+              <option value="long">Long Term</option>
+            </select>
+          </Field>
         </div>
-        <button onClick={save} className="px-8 py-3 bg-cobalt text-white text-[10px] font-bold uppercase">SAVE_GOAL</button>
-      </div>
+        <button onClick={save} className="mt-8 px-10 py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-all shadow-md shadow-blue-100">Save Objective</button>
+      </section>
     </div>
   );
 }
@@ -424,8 +668,10 @@ function AmbitionsTab({ onLog }: { onLog: (msg: string) => void }) {
 /* ─── Settings Tab ─── */
 
 function SettingsTab({ onLog }: { onLog: (msg: string) => void }) {
-  const [settings, setSettings] = useState<SiteSettings>({ availabilityValue: 99.9, dustThresholdDays: 60, starsForGold: 5, status: 'ONLINE', logLimit: 10 });
+  const [settings, setSettings] = useState<SiteSettings>({ availabilityValue: 99.9, dustThresholdDays: 60, starsForGold: 5, status: 'ONLINE', logLimit: 10, versionMap: {}, roadmapLabels: { short: { label: '', timeframe: '' }, mid: { label: '', timeframe: '' }, long: { label: '', timeframe: '' } } });
   const [cvLoading, setCvLoading] = useState(false);
+  const [versionInput, setVersionInput] = useState('GO=v1.23+');
+  const [labelInput, setLabelInput] = useState({ section: 'short' as 'short'|'mid'|'long', label: '', timeframe: '' });
 
   useEffect(() => { const s = localStorage.getItem('portfolioSettings'); if (s) setSettings(JSON.parse(s)); }, []);
 
@@ -433,59 +679,86 @@ function SettingsTab({ onLog }: { onLog: (msg: string) => void }) {
     const next = { ...settings, ...partial }; setSettings(next);
     localStorage.setItem('portfolioSettings', JSON.stringify(next));
     window.dispatchEvent(new CustomEvent('portfolioSettingsChanged'));
-    onLog(`PARAM_MODIFIED: ${Object.keys(partial)[0].toUpperCase()}`);
+    onLog(`UPDATED: ${Object.keys(partial)[0]}`);
   }
 
   async function uploadCv(e: any) {
     const file = e.target.files?.[0]; if (!file) return;
-    setCvLoading(true); onLog('CV_UPLOAD_INITIALIZED...');
+    setCvLoading(true); onLog('UPLOADING CV...');
     try {
       const b64 = await new Promise(r => { const rd = new FileReader(); rd.onload = () => r((rd.result as string).split(',')[1]); rd.readAsDataURL(file); });
-      const res = await fetch('/api/github', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'uploadCv', base64: b64, repo: import.meta.env.PUBLIC_GITHUB_REPO }) });
-      if (!res.ok) throw new Error('API_REJECTED');
-      update({ cvUrl: '/cv.pdf' }); onLog('CV_UPLOAD_SUCCESS');
-    } catch (e: any) { onLog(`CV_UPLOAD_ERROR: ${e.message}`); }
+      const res = await fetch('/api/github', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'uploadCv', base64: b64 }) });
+      if (!res.ok) throw new Error('UPLOAD_FAILED');
+      update({ cvUrl: '/cv.pdf' }); onLog('CV UPLOADED');
+    } catch (e: any) { onLog(`CV_ERROR: ${e.message}`); }
     finally { setCvLoading(false); }
   }
 
+  function addVersionMap() {
+    const [key, val] = versionInput.split('=').map(s => s.trim());
+    if (!key || !val) return;
+    update({ versionMap: { ...settings.versionMap, [key.toUpperCase()]: val } });
+    setVersionInput('');
+    onLog(`VERSION_ADDED: ${key}`);
+  }
+
+  function removeVersionMap(key: string) {
+    const next = { ...settings.versionMap };
+    delete next[key];
+    update({ versionMap: next });
+  }
+
+  function addRoadmapLabel() {
+    if (!labelInput.label || !labelInput.timeframe) return;
+    update({ roadmapLabels: { ...settings.roadmapLabels, [labelInput.section]: { label: labelInput.label, timeframe: labelInput.timeframe } } });
+    setLabelInput({ section: 'short', label: '', timeframe: '' });
+    onLog(`ROADMAP_LABEL_UPDATED: ${labelInput.section}`);
+  }
+
   return (
-    <div className="flex flex-col gap-10">
-      <div className="grid grid-cols-2 gap-10">
-        <div className="bg-white/[0.01] border border-white/5 p-10 space-y-10">
-          <p className="text-[11px] text-cobalt tracking-widest font-bold uppercase">// MASTER_CONTROLS</p>
-          <div className="space-y-6">
-            <Field label="AVAILABILITY (%)"><input type="range" min={0} max={100} step={0.1} value={settings.availabilityValue} onChange={e => update({ availabilityValue: Number(e.target.value) })} className="w-full accent-cobalt h-1 bg-white/5 appearance-none" /></Field>
-            <Field label="SYSTEM_STATUS"><select value={settings.status} onChange={e => update({ status: e.target.value as any })} className={inputClass}><option value="ONLINE">ONLINE</option><option value="BUSY">BUSY</option><option value="OFFLINE">OFFLINE</option></select></Field>
-            <div className="pt-6 border-t border-white/5 space-y-4">
-              <div className="flex justify-between items-center">
-                <p className="text-[10px] text-text-faint tracking-widest uppercase font-bold">// SECURE_CV_UPLINK</p>
-                {settings.cvUrl && (
-                  <a 
-                    href={settings.cvUrl} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="text-[9px] text-cobalt hover:underline tracking-widest uppercase font-bold"
-                  >
-                    [ VIEW_CURRENT_CV ]
-                  </a>
-                )}
-              </div>
-              <input type="file" onChange={uploadCv} className="hidden" id="cv-up" />
-              <label htmlFor="cv-up" className="block text-center border border-white/10 p-4 cursor-pointer text-[10px] text-white/40 hover:text-white hover:border-cobalt transition-all uppercase tracking-widest font-bold">{cvLoading ? 'UPLOADING...' : '[ CLICK_TO_UPLOAD_PDF ]'}</label>
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+      <section className="bg-white border border-slate-200 p-10 rounded-2xl shadow-sm flex flex-col gap-10">
+        <SectionHeader title="System Status" hint="Global availability controls" />
+        <div className="space-y-8">
+          <Field label={`Availability Vector: ${settings.availabilityValue}%`}>
+            <input type="range" min={0} max={100} step={0.1} value={settings.availabilityValue} onChange={e => update({ availabilityValue: Number(e.target.value) })} className="w-full h-2 bg-slate-100 rounded-full appearance-none accent-blue-600 cursor-pointer" />
+          </Field>
+          <Field label="Global Status Mode">
+            <select value={settings.status} onChange={e => update({ status: e.target.value as any })} className={inputClass}>
+              <option value="ONLINE">ONLINE (NORMAL)</option>
+              <option value="BUSY">BUSY (THROTTLED)</option>
+              <option value="OFFLINE">OFFLINE (MAINTENANCE)</option>
+            </select>
+          </Field>
+          <div className="pt-8 border-t border-slate-100 flex flex-col gap-4">
+            <div className="flex justify-between items-center">
+              <span className="text-[12px] font-bold text-slate-600">Secure CV Uplink</span>
+              {settings.cvUrl && <a href={settings.cvUrl} target="_blank" className="text-[11px] font-bold text-blue-600 hover:underline">View Active PDF</a>}
             </div>
+            <input type="file" onChange={uploadCv} className="hidden" id="cv-up" />
+            <label htmlFor="cv-up" className="block text-center border-2 border-dashed border-slate-200 rounded-xl py-12 cursor-pointer text-[13px] font-bold text-slate-400 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50 transition-all">
+              {cvLoading ? 'Uploading...' : 'Click to Upload CV (PDF)'}
+            </label>
           </div>
         </div>
-        <div className="bg-white/[0.01] border border-white/5 p-10 space-y-10">
-          <p className="text-[11px] text-cobalt tracking-widest font-bold uppercase">// ENGINE_PARAMS</p>
-          <div className="space-y-8">
-            <Field label="DUST_THRESHOLD (DAYS)"><input type="range" min={7} max={365} value={settings.dustThresholdDays} onChange={e => update({ dustThresholdDays: Number(e.target.value) })} className="w-full accent-warn h-1 bg-white/5 appearance-none" /></Field>
-            <Field label="GOLD_REQUIREMENT (STARS)"><input type="range" min={0} max={50} value={settings.starsForGold} onChange={e => update({ starsForGold: Number(e.target.value) })} className="w-full accent-bronze h-1 bg-white/5 appearance-none" /></Field>
-          </div>
-          <div className="pt-10 border-t border-err/20">
-            <button onClick={() => { if(confirm('RESET?')) { localStorage.clear(); window.location.reload(); } }} className="w-full py-4 border border-err/30 text-err text-[10px] font-bold uppercase hover:bg-err/10 transition-all">FACTORY_RESET_CACHE</button>
+      </section>
+
+      <section className="bg-white border border-slate-200 p-10 rounded-2xl shadow-sm flex flex-col gap-10">
+        <SectionHeader title="Engine Metrics" hint="Thresholds and data density" />
+        <div className="space-y-10">
+          <Field label={`Dust Threshold: ${settings.dustThresholdDays} Days`}>
+            <input type="range" min={7} max={365} value={settings.dustThresholdDays} onChange={e => update({ dustThresholdDays: Number(e.target.value) })} className="w-full h-2 bg-slate-100 rounded-full appearance-none accent-amber-500 cursor-pointer" />
+          </Field>
+          <Field label={`Gold Stars Requirement: ${settings.starsForGold}`}>
+            <input type="range" min={0} max={50} value={settings.starsForGold} onChange={e => update({ starsForGold: Number(e.target.value) })} className="w-full h-2 bg-slate-100 rounded-full appearance-none accent-amber-500 cursor-pointer" />
+          </Field>
+          <div className="pt-10 border-t border-slate-100">
+            <button onClick={() => { if(confirm('Wipe local buffers?')) { localStorage.clear(); window.location.reload(); } }} className="w-full py-4 text-red-500 font-bold border border-red-100 bg-red-50 rounded-xl hover:bg-red-100 transition-all">Clear Local Cache</button>
           </div>
         </div>
-      </div>
+      </section>
+
+      
     </div>
   );
 }
@@ -493,111 +766,162 @@ function SettingsTab({ onLog }: { onLog: (msg: string) => void }) {
 /* ─── Publish Tab ─── */
 
 function PublishTab({ onLog }: { onLog: (msg: string) => void }) {
-  const repo = import.meta.env.PUBLIC_GITHUB_REPO;
   const [publishing, setPublishing] = useState(false);
   const [builds, setBuilds] = useState<BuildEntry[]>([]);
 
   useEffect(() => { const s = localStorage.getItem('portfolioBuildHistory'); if (s) setBuilds(JSON.parse(s)); }, []);
 
   async function publish() {
-    setPublishing(true); onLog('INIT_GLOBAL_SYNC...');
+    setPublishing(true); onLog('INIT SYNC...');
     try {
-      const keys = ['portfolioProjects', 'portfolioSettings', 'portfolioExperience', 'portfolioAmbitions', 'portfolioTechstack'];
+      const keys = ['portfolioProjects', 'portfolioSettings', 'portfolioExperience', 'portfolioAmbitions', 'portfolioTechstack', 'portfolioIdentity'];
       const files = keys.filter(k => !!localStorage.getItem(k)).map(k => ({ path: `public/data/${k.replace('portfolio', '').toLowerCase()}.json`, content: localStorage.getItem(k)! }));
-      const res = await fetch('/api/github', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'publish', repo, branch: 'main', files }) });
-      if (!res.ok) throw new Error('BRIDGE_REJECTED');
-      onLog('UPLINK_SUCCESS');
+      const res = await fetch('/api/github', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'publish', branch: 'main', files }) });
+      if (!res.ok) throw new Error('SYNC_FAILED');
+      onLog('PUBLISH SUCCESS');
       const entry: BuildEntry = { buildNumber: (builds[0]?.buildNumber ?? 0) + 1, status: 'SUCCESS', timestamp: new Date().toISOString().slice(0, 19).replace('T', ' '), files: files.map(f => f.path.split('/').pop()!) };
       const next = [entry, ...builds].slice(0, 10); localStorage.setItem('portfolioBuildHistory', JSON.stringify(next)); setBuilds(next);
-    } catch (e: any) { onLog(`UPLINK_ERROR: ${e.message}`); }
+    } catch (e: any) { onLog(`PUBLISH_ERROR: ${e.message}`); }
     finally { setPublishing(false); }
   }
 
   return (
-    <div className="flex flex-col gap-12">
-      <div className="bg-white/[0.01] border border-white/5 p-12 flex flex-col gap-10">
-        <div><p className="text-[13px] text-white tracking-[0.3em] font-bold uppercase mb-2">// DEPLOYMENT_BRIDGE</p><p className="text-[11px] text-text-faint tracking-widest uppercase opacity-40">Sync local state with remote production grid. Rebuild latency: ~60s.</p></div>
-        <div className="p-6 bg-black/40 border border-white/10"><p className="text-[9px] text-text-faint tracking-widest uppercase mb-1">target_uplink:</p><p className="text-[12px] text-cobalt font-bold tracking-[0.2em]">{repo}</p></div>
-        <button onClick={publish} disabled={publishing} className="bg-cobalt text-white text-[11px] font-bold tracking-[0.4em] py-6 hover:bg-cobalt-light transition-all shadow-[0_0_50px_rgba(0,85,255,0.2)]">{publishing ? 'SYNCHRONIZING_BUFFERS...' : 'EXECUTE_PUBLISH_SEQUENCE \u2191'}</button>
-      </div>
-      <div className="space-y-6">
-        <p className="text-[10px] text-text-faint tracking-widest font-bold uppercase">// BUILD_HISTORY</p>
-        <div className="border border-white/5 bg-black/20 divide-y divide-white/5">
+    <div className="flex flex-col gap-10">
+      <section className="bg-white border border-slate-200 p-12 rounded-2xl shadow-lg relative overflow-hidden">
+        <div className="flex flex-col gap-6 relative z-10">
+          <div>
+            <h2 className="text-[24px] text-slate-900 font-bold tracking-tight mb-2">Publish Changes</h2>
+            <p className="text-[14px] text-slate-500 max-w-2xl leading-relaxed font-medium">Synchronize your local workspace with the live production site. This will trigger a GitHub Action rebuild. Estimated time: 60s.</p>
+          </div>
+          <div className="p-6 bg-slate-50 rounded-xl border border-slate-100 flex flex-col gap-2">
+            <span className="text-[11px] font-bold text-slate-400 uppercase">Target Repository</span>
+            <span className="text-[15px] font-bold text-blue-600 font-mono tracking-tight">Portfolio Live</span>
+          </div>
+          <button onClick={publish} disabled={publishing} className="bg-blue-600 text-white text-[15px] font-bold py-6 rounded-2xl hover:bg-blue-700 transition-all shadow-xl shadow-blue-100 active:scale-[0.99] disabled:opacity-50">
+            {publishing ? 'Synchronizing Buffers...' : 'Publish to Production ↑'}
+          </button>
+        </div>
+      </section>
+      
+      <section className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+        <div className="p-8 border-b border-slate-100 flex justify-between items-center">
+          <h3 className="text-[16px] font-bold text-slate-800">Deployment History</h3>
+          <span className="text-[11px] font-bold text-slate-400 uppercase">Last 10 events</span>
+        </div>
+        <div className="divide-y divide-slate-50">
+          {builds.length === 0 && <div className="p-12 text-center text-slate-300 font-medium italic">No recent builds found...</div>}
           {builds.map(b => (
-            <div key={b.buildNumber} className="px-8 py-4 flex items-center justify-between group hover:bg-white/[0.01]">
-              <div className="flex items-center gap-6"><span className="text-cobalt font-bold">#{b.buildNumber}</span><span className="text-[10px] text-white tracking-widest">{b.status}</span><span className="text-[10px] text-text-faint opacity-40 font-mono">{b.timestamp}</span></div>
-              <span className="text-[9px] text-text-faint tracking-widest italic opacity-0 group-hover:opacity-30 transition-opacity">[{b.files.join(', ')}]</span>
+            <div key={b.buildNumber} className="px-10 py-6 flex items-center justify-between hover:bg-slate-50 transition-colors">
+              <div className="flex items-center gap-10">
+                <span className="text-slate-900 font-bold text-[15px]">#{String(b.buildNumber).padStart(3, '0')}</span>
+                <div className="flex flex-col">
+                  <span className={`text-[13px] font-bold ${b.status === 'SUCCESS' ? 'text-green-600' : 'text-red-500'}`}>{b.status}</span>
+                  <span className="text-[11px] text-slate-400 font-medium">{b.timestamp}</span>
+                </div>
+              </div>
+              <span className="text-[11px] text-slate-400 font-bold bg-slate-100 px-3 py-1 rounded-full uppercase">{b.files[0]} +{b.files.length - 1} more</span>
             </div>
           ))}
         </div>
-      </div>
+      </section>
     </div>
   );
 }
 
-/* ─── Main Admin Panel Console ─── */
+/* ─── MAIN CONSOLE ─── */
 
 export default function AdminPanel() {
   const [auth, setAuth] = useState(false);
   const [tab, setTab] = useState<any>('projects');
   const [ready, setReady] = useState(false);
-  const [logs, setLogs] = useState<string[]>(['BUNKER_SYSTEM_ONLINE', 'AWAITING_OPERATOR_INPUT']);
+  const [logs, setLogs] = useState<string[]>(['SYSTEM READY', 'AWAITING OPERATOR INPUT']);
 
-  const addLog = useCallback((msg: string) => { setLogs(prev => [`${new Date().toLocaleTimeString()} \u2014 ${msg}`, ...prev].slice(0, 50)); }, []);
+  const addLog = useCallback((msg: string) => { setLogs(prev => [`${new Date().toLocaleTimeString()} — ${msg}`, ...prev].slice(0, 50)); }, []);
 
-  useEffect(() => { if (isSessionValid()) setAuth(true); setReady(true); }, []);
-  
   useEffect(() => {
-    const handleKeys = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); addLog('MANUAL_SYNC_TRIGGERED'); } };
-    window.addEventListener('keydown', handleKeys); return () => window.removeEventListener('keydown', handleKeys);
+    if (isSessionValid()) {
+      setAuth(true);
+      addLog('SESSION RECOVERED');
+    }
+    setReady(true);
   }, [addLog]);
-
+  
   if (!ready) return null;
   if (!auth) return <PasswordGate onAuth={() => setAuth(true)} />;
 
   return (
-    <div className="h-screen bg-[#0f1117] flex overflow-hidden font-mono text-white select-none">
-      <aside className="w-80 border-r border-white/5 flex flex-col shrink-0 bg-[#0a0c12]">
-        <div className="p-12 border-b border-white/5 flex flex-col gap-2">
-          <p className="text-[15px] text-white tracking-[0.4em] font-bold uppercase leading-none">Bunker_OS</p>
-          <div className="flex items-center gap-2"><span className="w-1.5 h-1.5 bg-cobalt animate-pulse rounded-full" /><p className="text-[9px] text-cobalt tracking-widest uppercase font-bold">Admin_Active</p></div>
+    <div className="h-screen bg-[#f8fafc] flex overflow-hidden font-sans text-slate-900 select-none">
+      {/* SIDEBAR NAVIGATION */}
+      <aside className="w-72 border-r border-slate-200 flex flex-col shrink-0 bg-white z-20">
+        <div className="p-10 border-b border-slate-50 flex flex-col gap-1">
+          <p className="text-[20px] text-slate-900 font-black tracking-tighter">Core OS</p>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 bg-green-500 rounded-full" />
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Admin Live</p>
+          </div>
         </div>
         <nav className="flex-1 p-6 flex flex-col gap-2">
           {[
-            { id: 'projects', label: 'PROJECT_MODULES', icon: '◈' },
-            { id: 'tech', label: 'TECH_REGISTRY', icon: '◰' },
-            { id: 'ambitions', label: 'ROADMAP_MAPPER', icon: '▲' },
-            { id: 'settings', label: 'SYSTEM_CONFIG', icon: '⚙' },
-            { id: 'publish', label: 'PUBLISH_BRIDGE', icon: '↑' },
+            { id: 'projects', label: 'Modules', icon: '◈' },
+            { id: 'tech', label: 'Registry', icon: '◰' },
+            { id: 'ambitions', label: 'Roadmap', icon: '▲' },
+            { id: 'system', label: 'System', icon: '◉' },
+            { id: 'publish', label: 'Publish', icon: '↑' },
           ].map(t => (
-            <button key={t.id} onClick={() => { setTab(t.id); addLog(`NAV_TO: ${t.id.toUpperCase()}`); }} className={`text-left px-8 py-5 text-[11px] tracking-[0.3em] uppercase transition-all duration-200 border-l-2 ${tab === t.id ? 'bg-cobalt/5 text-cobalt border-l-cobalt' : 'border-l-transparent text-text-faint hover:text-white hover:bg-white/[0.02]'}`}>
-              <span className="mr-6 opacity-30">{t.icon}</span> {t.label}
+            <button 
+              key={t.id} 
+              onClick={() => { setTab(t.id); addLog(`NAV: ${t.label}`); }} 
+              className={`text-left px-6 py-4 text-[14px] font-bold transition-all duration-200 rounded-xl flex items-center gap-4 ${tab === t.id ? 'text-blue-600 bg-blue-50 shadow-sm shadow-blue-50' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+            >
+              <span className={`text-[18px] transition-all duration-300 ${tab === t.id ? 'scale-110' : 'opacity-40'}`}>{t.icon}</span> 
+              {t.label}
             </button>
           ))}
         </nav>
-        <div className="p-12 border-t border-white/5"><button onClick={() => { sessionStorage.removeItem(SESSION_KEY); window.location.reload(); }} className="text-[10px] text-err/40 hover:text-err tracking-widest uppercase transition-all">✕ TERMINATE_SESSION</button></div>
+        <div className="p-8 border-t border-slate-50">
+          <button onClick={() => { sessionStorage.removeItem(SESSION_KEY); window.location.reload(); }} className="w-full flex items-center justify-center gap-3 px-4 py-3 text-[12px] text-red-500 font-bold bg-red-50 rounded-lg hover:bg-red-100 transition-all">
+            <span>✕</span> Logout
+          </button>
+        </div>
       </aside>
 
-      <main className="flex-1 flex flex-col min-w-0 bg-[#0f1117] shadow-[inset_0_0_150px_rgba(0,0,0,0.4)]">
-        <div className="flex-1 overflow-y-auto px-20 py-16 custom-scrollbar island-load">
-          <div className="max-w-5xl">
+      {/* MAIN CONTENT AREA */}
+      <main className="flex-1 flex flex-col min-w-0 bg-[#f8fafc] relative">
+        <div className="flex-1 overflow-y-auto px-16 py-16 custom-scrollbar relative z-10">
+          <div className="max-w-6xl mx-auto island-load">
             {tab === 'projects'   && <ProjectsTab onLog={addLog} />}
             {tab === 'tech'       && <TechTab onLog={addLog} />}
             {tab === 'ambitions'  && <AmbitionsTab onLog={addLog} />}
-            {tab === 'settings'   && <SettingsTab onLog={addLog} />}
+            {tab === 'system'     && <SettingsTab onLog={addLog} />}
+            
             {tab === 'publish'    && <PublishTab onLog={addLog} />}
           </div>
         </div>
       </main>
 
-      <aside className="w-80 border-l border-white/5 bg-[#0a0c12] flex flex-col shrink-0">
-        <div className="p-10 border-b border-white/5 bg-[#0f1117]"><p className="text-[10px] text-text-faint tracking-widest font-bold uppercase leading-none">// SESSION_HISTORY</p></div>
-        <div className="flex-1 p-8 flex flex-col gap-1 overflow-y-auto text-[10px] opacity-40 hover:opacity-100 transition-opacity">
-          {logs.map((l, i) => <p key={i} className={`py-1 border-b border-white/[0.02] ${i === 0 ? 'text-cobalt font-bold' : 'text-text-faint'}`}> {'>'} {l}</p>)}
+      {/* SESSION HISTORY LOGS (LIGHT MODE) */}
+      <aside className="w-72 border-l border-slate-200 bg-white flex flex-col shrink-0 z-20">
+        <div className="p-8 border-b border-slate-50 flex items-center justify-between">
+          <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">Live Terminal</p>
+          <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
         </div>
-        <div className="p-10 bg-[#0f1117] border-t border-white/5 flex flex-col gap-6">
-          <div className="flex flex-col gap-1"><span className="text-[9px] text-text-faint uppercase tracking-widest font-bold opacity-30 italic">operator:</span><p className="text-[11px] text-white tracking-widest font-bold uppercase">admin@gest_bunker</p></div>
-          <div className="flex flex-col gap-1"><span className="text-[9px] text-text-faint uppercase tracking-widest font-bold opacity-30 italic">status:</span><p className="text-[11px] text-green-500/80 tracking-widest font-bold uppercase">ENCRYPTED_SESSION</p></div>
+        <div className="flex-1 p-6 flex flex-col gap-3 overflow-y-auto text-[11px] font-medium opacity-60 hover:opacity-100 transition-opacity">
+          {logs.map((l, i) => (
+            <div key={i} className={`flex gap-3 leading-relaxed border-b border-slate-50 pb-2 ${i === 0 ? 'text-blue-600' : 'text-slate-500'}`}>
+              <span className="font-bold opacity-30">{logs.length - i}</span>
+              <span>{l}</span>
+            </div>
+          ))}
+        </div>
+        <div className="p-8 bg-slate-50 border-t border-slate-100 flex flex-col gap-4">
+          <div className="flex flex-col gap-1">
+            <span className="text-[9px] text-slate-400 font-bold uppercase">Identity</span>
+            <p className="text-[12px] text-slate-900 font-bold">Administrator</p>
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-[9px] text-slate-400 font-bold uppercase">Security</span>
+            <p className="text-[11px] text-green-600 font-bold">Session Active</p>
+          </div>
         </div>
       </aside>
     </div>

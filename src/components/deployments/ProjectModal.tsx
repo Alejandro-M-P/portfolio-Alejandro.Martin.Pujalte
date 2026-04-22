@@ -9,28 +9,26 @@ interface ProjectModalProps {
 
 marked.use({ gfm: true, breaks: true });
 
-function ghHeaders(): Record<string, string> {
-  return { Accept: 'application/vnd.github+json' };
-}
-
-function decodeBase64(content: string): string {
-  const binary = atob(content.replace(/\n/g, ''));
-  return new TextDecoder('utf-8').decode(Uint8Array.from(binary, c => c.charCodeAt(0)));
-}
-
 async function fetchReadme(repoSlug: string): Promise<string> {
-  const res = await fetch(`https://api.github.com/repos/${repoSlug}/readme`, { headers: ghHeaders() });
+  const res = await fetch('/api/github', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'getRepoContent', repoSlug })
+  });
   if (!res.ok) throw new Error(`README not found (${res.status})`);
   const data = await res.json();
-  return decodeBase64(data.content);
+  return data.content;
 }
 
 async function fetchRepoFile(repoSlug: string, path: string): Promise<{ content: string; isMd: boolean }> {
-  const res = await fetch(`https://api.github.com/repos/${repoSlug}/contents/${path}`, { headers: ghHeaders() });
+  const res = await fetch('/api/github', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'getRepoContent', repoSlug, path })
+  });
   if (!res.ok) throw new Error(`File not found: ${path} (${res.status})`);
   const data = await res.json();
-  if (data.type !== 'file') throw new Error(`${path} is not a file`);
-  const raw = decodeBase64(data.content);
+  const raw = data.content;
   return { content: raw, isMd: /\.(md|mdx|markdown)$/i.test(path) };
 }
 
@@ -166,20 +164,20 @@ export default function ProjectModal({ project, onClose }: ProjectModalProps) {
           onClick={e => e.stopPropagation()}
         >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-white/10 px-5 py-3 flex-shrink-0 gap-3">
+        <div className="flex items-center justify-between border-b border-white/10 px-5 py-3 shrink-0 gap-3">
           <div className="flex items-center gap-2 min-w-0 flex-wrap">
             <span className="text-lg font-bold text-white uppercase tracking-wider truncate">{project.name}</span>
           </div>
           <button
             onClick={onClose}
-            className="text-[10px] text-text-faint hover:text-white tracking-widest border border-white/15 px-2 py-1 hover:border-white/40 transition-colors duration-100 flex-shrink-0"
+            className="text-[10px] text-text-faint hover:text-white tracking-widest border border-white/15 px-2 py-1 hover:border-white/40 transition-colors duration-100 shrink-0"
           >
             [ESC]
           </button>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-white/10 flex-shrink-0 flex-wrap">
+        <div className="flex border-b border-white/10 shrink-0 flex-wrap">
           <button onClick={() => setTab('overview')} className={`px-5 py-2 text-xs tracking-widest uppercase transition-colors duration-100 border-b-2 ${tab === 'overview' ? 'border-cobalt text-white' : 'border-transparent text-text-faint hover:text-white'}`}>OVERVIEW</button>
           {hasRepo && (
             <button onClick={() => setTab('readme')} className={`px-5 py-2 text-xs tracking-widest uppercase transition-colors duration-100 border-b-2 ${tab === 'readme' ? 'border-cobalt text-white' : 'border-transparent text-text-faint hover:text-white'}`}>README</button>
@@ -331,7 +329,7 @@ export default function ProjectModal({ project, onClose }: ProjectModalProps) {
                   <div className="border border-white/10">
                     {specsEntries.map(([key, value]) => (
                       <div key={key} className="flex border-b border-white/5 last:border-b-0">
-                        <span className="text-[10px] text-text-faint tracking-widest uppercase px-3 py-2 border-r border-white/10 w-28 flex-shrink-0">{key}</span>
+                        <span className="text-[10px] text-text-faint tracking-widest uppercase px-3 py-2 border-r border-white/10 w-28 shrink-0">{key}</span>
                         <span className="text-xs text-text-primary px-3 py-2">{Array.isArray(value) ? value.join(', ') : String(value)}</span>
                       </div>
                     ))}
@@ -344,7 +342,7 @@ export default function ProjectModal({ project, onClose }: ProjectModalProps) {
 
         {/* Footer */}
         {project.specs?.repo && (
-          <div className="border-t border-white/10 px-5 py-2 flex-shrink-0">
+          <div className="border-t border-white/10 px-5 py-2 shrink-0">
             <a
               href={`https://${project.specs.repo}`}
               target="_blank"

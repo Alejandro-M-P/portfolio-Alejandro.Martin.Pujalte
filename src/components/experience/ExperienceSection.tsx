@@ -49,20 +49,20 @@ export default function ExperienceSection() {
                     alt={exp.company}
                     loading="lazy"
                     decoding="async"
-                    className="w-7 h-7 object-contain flex-shrink-0 bg-carbono-mid p-0.5"
+                    className="w-7 h-7 object-contain shrink-0 bg-carbono-mid p-0.5"
                   />
                 )}
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="text-xs font-bold text-white uppercase tracking-widest leading-snug">{exp.company}</span>
                     {exp.current && (
-                      <span className="text-[8px] font-bold tracking-widest uppercase border border-cobalt/40 text-cobalt px-1 py-0.5 bg-cobalt/5 flex-shrink-0">NOW</span>
+                      <span className="text-[8px] font-bold tracking-widest uppercase border border-cobalt/40 text-cobalt px-1 py-0.5 bg-cobalt/5 shrink-0">NOW</span>
                     )}
                   </div>
                   <span className="text-[10px] text-cobalt tracking-widest uppercase block">{exp.role}</span>
                 </div>
               </div>
-              <span className="text-[10px] text-text-faint tracking-widest flex-shrink-0 font-mono">{exp.period}</span>
+              <span className="text-[10px] text-text-faint tracking-widest shrink-0 font-mono">{exp.period}</span>
             </div>
 
             {exp.description && (
