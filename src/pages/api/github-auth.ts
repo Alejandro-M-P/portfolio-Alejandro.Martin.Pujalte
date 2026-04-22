@@ -20,7 +20,7 @@ export const GET: APIRoute = async ({ url }) => {
   }
 
   // Initiate OAuth flow
-  const host = url.origin;
+  const host = import.meta.env.DEV ? url.origin : 'https://www.alejandro-m-p.com';
   const redirectUri = `${host}/api/github-auth`;
   const state = Math.random().toString(36).substring(2, 15);
   const githubAuthUrl = `https://github.com/login/oauth/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=read:user&state=${state}`;
