@@ -81,34 +81,34 @@ export default function IdentitySection({ name, handle, bio, quote, status, avai
       className={`industrial-panel flex flex-col relative z-10 island-load overflow-hidden shadow-2xl transition-all duration-500 ${isGlowing ? 'ring-2 ring-cobalt shadow-[0_0_25px_rgba(0,85,255,0.4)]' : ''}`}
     >
       <div className="flex flex-col @container h-full">
-        {/* Header Adaptativo: Horizontal en pantallas bajas, Vertical en pantallas altas */}
-        <div className="relative w-full bg-carbono-mid flex flex-row min-[1200px]:min-h-[450px]:flex-col min-[1200px]:min-h-[450px]:h-auto h-28 border-b border-white/5 transition-all duration-500">
-          <div className="relative w-28 min-[1200px]:min-h-[450px]:w-full min-[1200px]:min-h-[450px]:h-64 h-full shrink-0 overflow-hidden">
+        {/* Header Adaptativo: Más grande y vertical en 2K, horizontal compacto en 1080p */}
+        <div className="relative w-full bg-carbono-mid flex flex-row min-h-[450px]:lg:flex-col min-h-[450px]:lg:h-auto h-24 sm:h-28 border-b border-white/5 transition-all duration-500 ease-in-out">
+          <div className="relative w-24 sm:w-28 min-h-[450px]:lg:w-full min-h-[450px]:lg:h-[320px] h-full shrink-0 overflow-hidden">
             {!imgError ? (
               <img
                 src="/profile.jpg"
                 alt={name}
-                className="w-full h-full object-cover object-center"
+                className="w-full h-full object-cover object-top lg:object-center transition-transform duration-700 hover:scale-105"
                 onError={() => setImgError(true)}
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center text-[13px] text-text-faint tracking-widest uppercase">NO_SIGNAL</div>
             )}
-            {/* Gradiente solo visible en modo vertical */}
-            <div className="absolute inset-0 bg-linear-to-t from-carbono-surface/90 via-transparent to-transparent hidden min-[1200px]:min-h-[450px]:block" />
+            {/* Gradiente solo visible en modo vertical (pantallas grandes) */}
+            <div className="absolute inset-0 bg-linear-to-t from-black/80 via-transparent to-transparent hidden min-h-[450px]:lg:block" />
           </div>
           
-          {/* Nombre y status */}
-          <div className="p-4 flex-1 flex flex-col justify-center min-[1200px]:min-h-[450px]:absolute min-[1200px]:min-h-[450px]:bottom-0 min-[1200px]:min-h-[450px]:left-0 min-[1200px]:min-h-[450px]:w-full min-[1200px]:min-h-[450px]:p-5 min-[1200px]:min-h-[450px]:bg-linear-to-t min-[1200px]:min-h-[450px]:from-black/80 min-[1200px]:min-h-[450px]:to-transparent">
-            <Pill variant="cobalt" className="text-[10px] mb-1.5 w-fit shadow-lg shadow-cobalt/20">{status}</Pill>
+          {/* Nombre y status: Posicionamiento dinámico */}
+          <div className="p-3 sm:p-4 flex-1 flex flex-col justify-center min-h-[450px]:lg:absolute min-h-[450px]:lg:bottom-0 min-h-[450px]:lg:left-0 min-h-[450px]:lg:w-full min-h-[450px]:lg:p-6 lg:bg-linear-to-t lg:from-black/90 lg:to-transparent">
+            <Pill variant="cobalt" className="text-[9px] sm:text-[10px] mb-1 sm:mb-2 w-fit shadow-lg shadow-cobalt/20">{status}</Pill>
             <div className="flex flex-col gap-0.5">
-              <h1 className="text-[14px] min-[1200px]:min-h-[450px]:text-[18px] font-bold tracking-tight text-white leading-tight drop-shadow-md">
+              <h1 className="text-[13px] sm:text-[14px] min-h-[450px]:lg:text-[20px] font-bold tracking-tight text-white leading-tight drop-shadow-xl">
                 {name.replace('\n', ' ')}
                 {birthDate && calculateAge(birthDate) !== null && (
-                  <span className="text-[12px] font-normal text-white/70 ml-2 opacity-80">({calculateAge(birthDate)})</span>
+                  <span className="text-[11px] sm:text-[12px] font-normal text-white/60 ml-2 opacity-80">({calculateAge(birthDate)})</span>
                 )}
               </h1>
-              <span className="text-[10px] min-[1200px]:min-h-[450px]:text-[11px] text-text-faint tracking-[0.15em] uppercase drop-shadow-sm">
+              <span className="text-[9px] sm:text-[10px] min-h-[450px]:lg:text-[11px] text-white/40 tracking-[0.2em] uppercase drop-shadow-sm font-black">
                 {handle}
               </span>
             </div>

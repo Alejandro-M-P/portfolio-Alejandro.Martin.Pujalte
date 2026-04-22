@@ -28,22 +28,27 @@ export default function CoreMasonry({ items }: CoreMasonryProps) {
 
   return (
     <div className="w-full lg:h-screen lg:max-h-screen flex flex-col items-center bg-black overflow-x-hidden overflow-y-auto lg:overflow-hidden font-sans">
-      <div className="max-w-[1800px] w-full h-full p-4 md:p-6 lg:p-6 xl:p-10 flex flex-col lg:flex-row gap-4 md:gap-6 lg:gap-8">
+      <div className="max-w-[1800px] w-full h-full p-4 md:p-6 lg:p-8 xl:p-10 flex flex-col lg:flex-row gap-6 md:gap-8">
         
-        {/* SIDEBAR: Identidad + Logs (Compacto verticalmente) */}
-        <div className="flex flex-col gap-4 lg:gap-6 w-full lg:w-[380px] h-full shrink-0">
-          {/* Identidad: Ahora más compacta gracias al cambio de breakpoint en el componente */}
-          <motion.div layoutId="identity" layout className="shrink-0">
+        {/* SIDEBAR: Identidad + Logs (Dinámico por altura) */}
+        <div className="flex flex-col gap-6 w-full lg:w-[380px] h-full shrink-0">
+          
+          {/* Identidad: Se adapta al espacio vertical */}
+          <motion.div 
+            layoutId="identity" 
+            layout 
+            className="shrink-0 lg:max-h-[85vh] overflow-hidden"
+          >
             {findItem('identity')}
           </motion.div>
           
-          {/* Logs: Se estira para ocupar el resto del sidebar */}
+          {/* Logs: Solo en pantallas con suficiente altura */}
           <motion.div 
             layoutId="logs" 
             layout 
-            className="flex-1 hidden lg:flex flex-col border border-white/5 bg-carbono-surface/30 backdrop-blur-md overflow-hidden"
+            className="flex-1 hidden min-h-[450px]:lg:flex flex-col border border-white/5 bg-carbono-surface/30 backdrop-blur-md overflow-hidden"
           >
-            <div className="flex-1 p-4 lg:p-5 flex flex-col h-full overflow-hidden">
+            <div className="flex-1 p-5 flex flex-col h-full overflow-hidden">
               <SectionHeader title="// SYSTEM_LOGS" />
               <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0 text-[12px]">
                 {findItem('logs')}
@@ -52,12 +57,12 @@ export default function CoreMasonry({ items }: CoreMasonryProps) {
           </motion.div>
         </div>
 
-        {/* MAIN CONTENT: Distribución proporcional */}
-        <div className="flex-1 flex flex-col gap-4 md:gap-6 lg:gap-8 h-full min-w-0">
+        {/* MAIN CONTENT: Grilla Masonry Adaptativa */}
+        <div className="flex-1 flex flex-col gap-6 md:gap-8 h-full min-w-0">
           
-          {/* PROJECTS: Bloque superior */}
-          <motion.div layoutId="projects" layout className="flex-[1.4] min-h-0">
-            <section className="h-full border border-white/5 bg-carbono-surface/30 backdrop-blur-md p-4 md:p-6 lg:p-8 overflow-hidden relative shadow-2xl shadow-black/40 flex flex-col">
+          {/* PROJECTS: Bloque principal dinámico */}
+          <motion.div layoutId="projects" layout className="flex-[1.5] min-h-0">
+            <section className="h-full border border-white/5 bg-carbono-surface/30 backdrop-blur-md p-6 md:p-8 overflow-hidden relative shadow-2xl shadow-black/40 flex flex-col">
               <SectionHeader title="// DEPLOYED_MODULES" />
               <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0">
                 {findItem('projects')}
@@ -65,11 +70,11 @@ export default function CoreMasonry({ items }: CoreMasonryProps) {
             </section>
           </motion.div>
 
-          {/* BOTTOM ROW: Tech + Roadmap */}
-          <div className="flex-1 flex flex-col md:flex-row gap-4 md:gap-6 lg:gap-8 min-h-0">
+          {/* BOTTOM ROW: Tech + Roadmap (Dinámico) */}
+          <div className="flex-1 hidden min-h-[600px]:flex flex-col md:flex-row gap-6 md:gap-8 min-h-0">
             
             <motion.div layoutId="tech" layout className="flex-1 min-h-0">
-              <section className="h-full border border-white/5 bg-carbono-surface/30 backdrop-blur-md p-4 lg:p-6 overflow-hidden flex flex-col shadow-xl shadow-black/20">
+              <section className="h-full border border-white/5 bg-carbono-surface/30 backdrop-blur-md p-5 md:p-6 overflow-hidden flex flex-col shadow-xl shadow-black/20">
                 <SectionHeader title="// TECH_STACK_CORE" />
                 <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0">
                   {findItem('tech')}
@@ -78,7 +83,7 @@ export default function CoreMasonry({ items }: CoreMasonryProps) {
             </motion.div>
 
             <motion.div layoutId="roadmap" layout className="flex-1 min-h-0">
-              <section className="h-full border border-white/5 bg-carbono-surface/30 backdrop-blur-md p-4 lg:p-6 overflow-hidden flex flex-col shadow-xl shadow-black/20">
+              <section className="h-full border border-white/5 bg-carbono-surface/30 backdrop-blur-md p-5 md:p-6 overflow-hidden flex flex-col shadow-xl shadow-black/20">
                 <SectionHeader title="// STRATEGIC_ROADMAP" />
                 <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0">
                   {findItem('roadmap')}
