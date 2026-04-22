@@ -97,16 +97,8 @@ function PasswordGate({ onAuth }: { onAuth: () => void }) {
   async function startOAuth() {
     setLoading(true);
     setErr('');
-    try {
-      const res = await fetch('/api/github-auth', { method: 'GET' });
-      if (!res.ok) throw new Error('OAUTH_INIT_FAILED');
-      const data = await res.json().catch(() => ({}));
-      if (data.error) throw new Error(data.error);
-      window.location.href = data.url || data.location || '/api/github-auth';
-    } catch (e: any) {
-      setErr(e.message || 'CONNECTION_FAILURE');
-      setLoading(false);
-    }
+    // Direct redirect to GitHub OAuth - no fetch needed
+    window.location.href = '/api/github-auth';
   }
 
   useEffect(() => {
