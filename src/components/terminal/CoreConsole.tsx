@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import LogStream from './LogStream';
 import type { LogEntry, Project, SiteSettings, TechTool } from '../../types';
+import { sanitizeProjects } from '../../lib/projectStorage';
 
 // ── Virtual File System ───────────────────────────────────────────────────────
 
@@ -35,15 +36,23 @@ const VFS_BASE: any = {
 
 let VFS = JSON.parse(JSON.stringify(VFS_BASE));
 
+function projectFileName(project: Project): string {
+  const base = (project.name || project.id || 'module')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return `${base || 'module'}.project`;
+}
+
 function updateVFS(projects: Project[], identity: any, techStack: TechTool[], logs: LogEntry[]) {
   VFS = JSON.parse(JSON.stringify(VFS_BASE));
   
   // Projects sync
   if (VFS.root.children.projects) {
     projects.forEach(p => {
-      VFS.root.children.projects.children[`${p.id}.project`] = { 
+      VFS.root.children.projects.children[projectFileName(p)] = { 
         type: 'file', 
-        content: `ID: ${p.id}\nNAME: ${p.name}\nSTACK: ${p.stack.join(', ')}\nSTARS: ${p.specs?.stars || 0}\nURL: ${p.url || 'N/A'}` 
+        content: `ID: ${p.id}\nNAME: ${p.name}\nSTACK: ${p.stack.join(', ')}\nSTARS: ${p.specs?.stars || 0}\nURL: ${String(p.specs?.repo || 'N/A')}` 
       };
     });
   }
@@ -52,7 +61,7 @@ function updateVFS(projects: Project[], identity: any, techStack: TechTool[], lo
   if (VFS.root.children.about) {
     VFS.root.children.about.children['identity.json'].content = JSON.stringify(identity, null, 2);
     VFS.root.children.about.children['stack.json'].content = JSON.stringify(
-      techStack.map(t => ({ tool: t.name, proficiency: `${t.level}%`, category: t.category })), 
+      techStack.map(t => ({ tool: t.name, proficiency: `${t.usageLevel}%`, version: t.version })), 
       null, 2
     );
   }
@@ -148,12 +157,33 @@ function execute(raw: string, ctx: ExecuteContext): string[] | '__PURGE__' {
   const dispatchSystemEvent = (action: string, detail: any = {}) => {
     window.dispatchEvent(new CustomEvent('portfolioConsoleAction', { detail: { action, ...detail } }));
   };
+  const revealModules = () => {
+    const selectors = [
+      '[data-section="identity"]',
+      '[data-section="projects"]',
+      '[data-section="tech"]',
+      '[data-section="roadmap"]',
+      '[data-terminal-shell]',
+    ];
+
+    selectors.forEach((selector) => {
+      const el = document.querySelector(selector);
+      if (!(el instanceof HTMLElement)) return;
+      el.style.visibility = 'visible';
+      el.style.transition = 'all 1.2s cubic-bezier(0.16, 1, 0.3, 1)';
+      el.style.opacity = '1';
+      el.style.filter = 'none';
+      el.style.transform = 'none';
+    });
+
+    dispatchSystemEvent('regen-module', { module: 'all' });
+  };
 
   switch (cmd) {
     case 'help': {
       const isFull = args.includes('-a');
-      const publicCmds = ['ls', 'cd', 'cat', 'pwd', 'tree', 'wget', 'focus', 'scan', 'status', 'whoami', 'neofetch', 'clear', 'exit'];
-      const secretCmds = ['sudo', 'approve', 'hire-me', 'matrix', 'glitch', 'rm', 'top', 'coffee', 'ssh', 'stars'];
+      const publicCmds = ['ls', 'cd', 'cat', 'pwd', 'tree', 'wget', 'scan', 'status', 'whoami', 'neofetch', 'clear', 'exit'];
+      const secretCmds = ['sudo', 'approve', 'hire-me', 'matrix', 'glitch', 'rm', 'regen module', 'top', 'coffee', 'ssh', 'stars'];
       
       if (isFull) {
         const lines = [
@@ -177,10 +207,9 @@ function execute(raw: string, ctx: ExecuteContext): string[] | '__PURGE__' {
         `${g('ls'.padEnd(12))} ${o('— list files/directories (ls <path>)')}`,
         `${g('cd'.padEnd(12))} ${o('— change directory (cd <path>)')}`,
         `${g('cat'.padEnd(12))} ${o('— read file (cat <path>)')}`,
-        `${g('pwd'.padEnd(12))} ${o('— print working directory')}`,
+        `${g('pwd'.padEnd(12))} ${o('— print active working context')}`,
         `${g('tree'.padEnd(12))} ${o('— display system structure')}`,
         `${g('wget cv'.padEnd(12))} ${o('— download my resume')}`,
-        `${g('focus'.padEnd(12))} ${o('— scroll to section (identity, projects...)')}`,
         `${g('scan'.padEnd(12))} ${o('— integrity & module scan')}`,
         `${g('status'.padEnd(12))} ${o('— check system health')}`,
         `${g('whoami'.padEnd(12))} ${o('— session info')}`,
@@ -208,7 +237,17 @@ function execute(raw: string, ctx: ExecuteContext): string[] | '__PURGE__' {
       return [lines.join('  ')];
     }
 
-    case 'pwd': return [`/${currentPath.join('/')}`];
+    case 'pwd': {
+      const path = currentPath.length === 0 ? '/' : `/${currentPath.join('/')}`;
+      const scope = currentPath.length === 0 ? 'ROOT_ACCESS' : currentPath[currentPath.length - 1].toUpperCase();
+      return [
+        `${C.bold}${C.white}// WORKING_CONTEXT${C.reset}`,
+        o('─────────────────────────────────────────────'),
+        `${g('PATH'.padEnd(12))} ${path}`,
+        `${g('SCOPE'.padEnd(12))} ${scope}`,
+        `${g('SESSION'.padEnd(12))} RECRUITER_SYNC`,
+      ];
+    }
 
     case 'cd': {
       const target = args[0] || '~';
@@ -251,14 +290,13 @@ function execute(raw: string, ctx: ExecuteContext): string[] | '__PURGE__' {
         // Smart trigger: if it's a project file, highlight in UI and open modal
         if (target.includes('projects/') || (currentPath.includes('projects') && target.endsWith('.project'))) {
           const filename = target.split('/').pop() || '';
-          const projectId = filename.replace('.project', '');
-          const el = document.getElementById(projectId);
+          const project = projects.find((p: Project) => projectFileName(p) === filename);
+          const el = project ? document.getElementById(project.id) : null;
           if (el) {
             el.scrollIntoView({ behavior: 'smooth', block: 'center' });
             el.classList.add('hdr-glitch');
             setTimeout(() => el.classList.remove('hdr-glitch'), 1000);
           }
-          const project = projects.find((p: Project) => p.id === projectId);
           if (project) {
             setTimeout(() => window.dispatchEvent(new CustomEvent('portfolioOpenProject', { detail: { project } })), 500);
           }
@@ -303,16 +341,12 @@ function execute(raw: string, ctx: ExecuteContext): string[] | '__PURGE__' {
       ];
     }
 
-    case 'focus': {
-      const target = args[0]?.toLowerCase();
-      if (!target) return [e('Usage: focus <section> (identity, projects, tech, roadmap)')];
-      const el = document.getElementById(target) || document.querySelector(`[data-section="${target}"]`);
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth' });
-        dispatchSystemEvent('focus-section', { section: target });
-        return [g(`✓ Focusing on ${target}...`)];
+    case 'regen': {
+      if (args[0]?.toLowerCase() !== 'module' || args.length !== 1) {
+        return [e('Usage: regen module')];
       }
-      return [e(`Section ${target} not found.`)];
+      revealModules();
+      return [g('[RECOVERY] MODULE_STACK_RESTORED')];
     }
 
     case 'glitch': {
@@ -450,7 +484,8 @@ function execute(raw: string, ctx: ExecuteContext): string[] | '__PURGE__' {
   }
 }
 
-const COMMAND_LIST = ['help', 'ls', 'cd', 'pwd', 'tree', 'cat', 'wget', 'scan', 'status', 'whoami', 'matrix', 'clear', 'exit', 'focus', 'glitch', 'rm', 'neofetch', 'top', 'coffee', 'ssh', 'stars', 'hire-me', 'sudo', 'approve'];
+const COMMAND_LIST = ['help', 'ls', 'cd', 'pwd', 'tree', 'cat', 'wget', 'scan', 'status', 'whoami', 'matrix', 'clear', 'exit', 'glitch', 'rm', 'regen', 'neofetch', 'top', 'coffee', 'ssh', 'stars', 'hire-me', 'sudo', 'approve'];
+const DEFAULT_SETTINGS: SiteSettings = { availabilityValue: 100, dustThresholdDays: 60, starsForGold: 5 };
 
 interface CoreConsoleProps {
   logs: LogEntry[];
@@ -459,15 +494,17 @@ interface CoreConsoleProps {
   settings?: SiteSettings;
   identity?: any;
   techStack?: TechTool[];
+  hideLogsHeader?: boolean;
 }
 
 export default function CoreConsole({ 
   logs, 
   logLimit = 10, 
   projects = [], 
-  settings = { availabilityValue: 100 }, 
+  settings = DEFAULT_SETTINGS, 
   identity = {}, 
-  techStack = [] 
+  techStack = [],
+  hideLogsHeader = false,
 }: CoreConsoleProps) {
   const [mode, setMode] = useState<'logs' | 'terminal'>(() => 'logs');
   const [phase, setPhase] = useState<'idle' | 'crt-off' | 'crt-boot'>('idle');
@@ -480,24 +517,12 @@ export default function CoreConsole({
   const history = useRef<string[]>([]);
   const historyIdx = useRef(-1);
   const modeRef = useRef<'logs' | 'terminal'>(mode);
-  const liveProjectsRef = useRef<Project[]>(projects);
+  const liveProjectsRef = useRef<Project[]>(sanitizeProjects(projects));
   
   useEffect(() => { modeRef.current = mode; sessionStorage.setItem('terminal_mode', mode); }, [mode]);
 
   useEffect(() => {
-    const load = () => {
-      const stored = localStorage.getItem('portfolioProjects');
-      liveProjectsRef.current = stored ? JSON.parse(stored) : projects;
-    };
-    load();
-    const onRefresh = () => load();
-    const onStorage = (e: StorageEvent) => { if (e.key === 'portfolioProjects' || e.key === 'lastDataUpdate') load(); };
-    window.addEventListener('portfolioProjectsRefreshed', onRefresh);
-    window.addEventListener('storage', onStorage);
-    return () => {
-      window.removeEventListener('portfolioProjectsRefreshed', onRefresh);
-      window.removeEventListener('storage', onStorage);
-    };
+    liveProjectsRef.current = sanitizeProjects(projects);
   }, [projects]);
 
   const enterTerminal = useCallback(() => { if (modeRef.current === 'terminal') return; setPhase('crt-off'); setTimeout(() => { setMode('terminal'); setPhase('crt-boot'); setTimeout(() => setPhase('idle'), 600); }, 350); }, []);
@@ -543,34 +568,43 @@ export default function CoreConsole({
             const tech = document.querySelector('section[data-section="tech"]') || document.querySelector('main > div > section:nth-child(1)');
             const projectsEl = document.querySelector('section[data-section="projects"]') || document.querySelector('main > section');
             const identityEl = document.querySelector('section[data-section="identity"]') || document.querySelector('aside > section:first-child');
-            const terminalBlock = containerRef.current?.closest('.flex-1.min-h-72') as HTMLElement;
-            const sequence = [roadmap, tech, projectsEl, identityEl].filter(Boolean) as HTMLElement[];
-            const filesToKill = ['/projects/aether.project', '/projects/axiom.project', '/projects/git-courer.project', '/about/identity.json', '/about/skills.md', '/system/kernel.log', '/system/env.local', '/README.md', '/usr/bin/neofetch', '/usr/bin/top', '/etc/shadow'];
+            const terminalBlock = containerRef.current?.closest('[data-terminal-shell]') as HTMLElement | null;
+            const projectFiles = liveProjectsRef.current.length > 0
+              ? liveProjectsRef.current.map((project) => `/projects/${projectFileName(project)}`)
+              : ['/projects/module.project'];
+            const filesToKill = [
+              ...projectFiles,
+              '/about/identity.json',
+              '/about/stack.json',
+              '/system/kernel.log',
+              '/system/env.local',
+              '/README.md',
+              '/usr/bin/neofetch',
+              '/usr/bin/top',
+              '/etc/shadow'
+            ];
+            const collapseBlock = (el: Element | null) => {
+              if (!(el instanceof HTMLElement)) return;
+              el.style.transition = 'all 0.8s ease-in';
+              el.style.opacity = '0';
+              el.style.filter = 'blur(40px) brightness(4)';
+              el.style.transform = 'scale(0.95)';
+              setTimeout(() => { el.style.visibility = 'hidden'; }, 800);
+            };
 
             for (let i = 0; i < filesToKill.length; i++) {
               term.writeln(`\x1b[31mDELETING: ${filesToKill[i]} ... DONE\x1b[0m`);
-              const seqIdx = Math.floor(i / 3);
-              if (i % 3 === 0 && sequence[seqIdx]) {
-                const s = sequence[seqIdx];
-                s.style.transition = 'all 0.8s ease-in';
-                s.style.opacity = '0';
-                s.style.filter = 'blur(40px) brightness(4)';
-                s.style.transform = 'scale(0.95)';
-                setTimeout(() => { s.style.visibility = 'hidden'; }, 800);
-              }
+              if (i === 0) collapseBlock(projectsEl);
+              if (i === 3) collapseBlock(identityEl);
+              if (i === 6) collapseBlock(tech);
+              if (i === 9) collapseBlock(roadmap);
               await new Promise(r => setTimeout(r, 150));
             }
 
             term.writeln(`\x1b[1m\x1b[31m[FATAL] SYSTEM_CORE_DELETED\x1b[0m`);
             await new Promise(r => setTimeout(r, 1000));
             document.body.style.backgroundColor = '#000000';
-            if (terminalBlock) {
-              terminalBlock.style.transition = 'all 0.6s cubic-bezier(0.4, 0, 1, 1)';
-              terminalBlock.style.opacity = '0';
-              terminalBlock.style.filter = 'brightness(5) blur(10px)';
-              terminalBlock.style.transform = 'scale(0.9) translateY(20px)';
-              setTimeout(() => { terminalBlock.style.visibility = 'hidden'; }, 650);
-            }
+            collapseBlock(terminalBlock);
             setPhase('crt-off'); 
             await new Promise(r => setTimeout(r, 4500)); 
             if (terminalBlock) {
@@ -712,18 +746,20 @@ export default function CoreConsole({
 
   return (
     <div ref={containerRef} className="border border-white/10 bg-carbono-surface w-full flex flex-col h-full overflow-hidden island-load">
-      <div className={`border-b border-white/10 px-4 py-3 flex items-center gap-3 bg-carbono shrink-0 group ${mode === 'logs' ? 'cursor-pointer hover:bg-carbono/20' : ''}`} onClick={mode === 'logs' ? enterTerminal : undefined}>
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-text-faint tracking-widest uppercase">{mode === 'logs' ? 'SYSTEM LOGS' : 'CORE OPERATING SYSTEM'}</span>
-          {mode === 'logs' && (
-            <span className="text-[9px] text-white/40 tracking-widest uppercase opacity-40 group-hover:opacity-100 transition-opacity">
-              [ {'>'}_ BOOT_CONSOLE ]
-            </span>
-          )}
+      {!(mode === 'logs' && hideLogsHeader) && (
+        <div className={`border-b border-white/10 px-4 py-3 flex items-center gap-3 bg-carbono shrink-0 group ${mode === 'logs' ? 'cursor-pointer hover:bg-carbono/20' : ''}`} onClick={mode === 'logs' ? enterTerminal : undefined}>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-text-faint tracking-widest uppercase">{mode === 'logs' ? 'SYSTEM LOGS' : 'CORE OPERATING SYSTEM'}</span>
+            {mode === 'logs' && (
+              <span className="text-[9px] text-white/40 tracking-widest uppercase opacity-40 group-hover:opacity-100 transition-opacity">
+                [ {'>'}_ BOOT_CONSOLE ]
+              </span>
+            )}
+          </div>
+          <div className="flex gap-1.5 ml-auto"><div className="w-2 h-2 bg-err/60" /><div className="w-2 h-2 bg-warn/60" /><div className="w-2 h-2 bg-cobalt/60" /></div>
+          {mode === 'logs' ? <span className="text-[10px] text-cobalt tracking-widest">● LIVE</span> : <button onClick={exitTerminal} className="text-[10px] text-text-faint hover:text-err tracking-widest transition-colors">✕ SHUTDOWN</button>}
         </div>
-        <div className="flex gap-1.5 ml-auto"><div className="w-2 h-2 bg-err/60" /><div className="w-2 h-2 bg-warn/60" /><div className="w-2 h-2 bg-cobalt/60" /></div>
-        {mode === 'logs' ? <span className="text-[10px] text-cobalt tracking-widest">● LIVE</span> : <button onClick={exitTerminal} className="text-[10px] text-text-faint hover:text-err tracking-widest transition-colors">✕ SHUTDOWN</button>}
-      </div>
+      )}
       <div className={`flex-1 min-h-0 flex flex-col overflow-hidden ${phase === 'crt-off' ? 'crt-off' : ''} ${phase === 'crt-boot' ? 'crt-boot' : ''}`}>
         {mode === 'logs' ? <LogStream logs={logs} logLimit={logLimit} hideHeader /> : <div ref={xtermContainer} className="flex-1 min-h-0 terminal-scanlines" style={{ background: '#000000' }} />}
       </div>

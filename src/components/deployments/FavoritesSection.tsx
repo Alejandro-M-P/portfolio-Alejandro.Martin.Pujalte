@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { Project } from '../../types';
+import { parseStoredProjects } from '../../lib/projectStorage';
 import ProjectCard from './ProjectCard';
 import ProjectModal from './ProjectModal';
 
@@ -9,9 +10,7 @@ export default function FavoritesSection() {
 
   function loadFavorites() {
     try {
-      const stored = localStorage.getItem('portfolioProjects');
-      if (!stored) return;
-      const all: Project[] = JSON.parse(stored);
+      const all = parseStoredProjects(localStorage.getItem('portfolioProjects'));
       const pinned = all
         .filter(p => p.isFavorite)
         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));

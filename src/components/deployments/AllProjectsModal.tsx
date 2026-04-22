@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { Project } from '../../types';
+import { sortProjects } from '../../lib/projectRanking';
 import ProjectCard from './ProjectCard';
 import ProjectModal from './ProjectModal';
 
@@ -11,13 +12,7 @@ interface AllProjectsModalProps {
 export default function AllProjectsModal({ projects, onClose }: AllProjectsModalProps) {
   const [detail, setDetail] = useState<Project | null>(null);
 
-  const sorted = [...projects].sort((a, b) => {
-    const aScore = (a.isHighlighted ? 2 : 0) + (a.isFavorite ? 1 : 0);
-    const bScore = (b.isHighlighted ? 2 : 0) + (b.isFavorite ? 1 : 0);
-    if (bScore !== aScore) return bScore - aScore;
-    if (a.pushedAt && b.pushedAt) return new Date(b.pushedAt).getTime() - new Date(a.pushedAt).getTime();
-    return (a.order ?? 0) - (b.order ?? 0);
-  });
+  const sorted = sortProjects(projects);
 
   return (
     <>

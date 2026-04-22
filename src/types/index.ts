@@ -1,3 +1,8 @@
+export interface ProjectSpecStackUsage {
+  name: string;
+  usageLevel: number;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -7,7 +12,7 @@ export interface Project {
   initSequence: string;
   description?: string;
   businessImpact?: string;
-  specs: Record<string, string | string[]>;
+  specs: Record<string, string | string[] | ProjectSpecStackUsage[]>;
   isHighlighted?: boolean;
   isPrivate?: boolean;
   isFavorite?: boolean;

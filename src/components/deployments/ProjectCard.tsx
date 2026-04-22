@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { Project, SiteSettings } from '../../types';
 
 interface ProjectCardProps {
@@ -42,9 +42,8 @@ const statusStyle: Record<string, string> = {
 };
 
 export default function ProjectCard({ project, onClick }: ProjectCardProps) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
   const [settings, setSettings] = useState<SiteSettings>(DEFAULT_SETTINGS);
+  const [imageError, setImageError] = useState(false);
 
   useEffect(() => {
     setSettings(loadSettings());
@@ -58,15 +57,8 @@ export default function ProjectCard({ project, onClick }: ProjectCardProps) {
   }, []);
 
   useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) { setVisible(true); observer.disconnect(); } },
-      { rootMargin: '150px' }
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
+    setImageError(false);
+  }, [project.id, project.photo]);
 
   const stars     = Number(project.specs?.stars ?? 0);
   const status    = project.specs?.status as string | undefined;
@@ -74,12 +66,8 @@ export default function ProjectCard({ project, onClick }: ProjectCardProps) {
   const dustLabel = isGold ? null : getDustLabel(project.pushedAt, settings.dustThresholdDays);
   const entropyStyle = isGold ? {} : getEntropyStyle(project.pushedAt, settings.dustThresholdDays);
 
-  if (!visible) return (
-    <div ref={ref} className="aspect-square border border-white/5 bg-carbono-surface animate-pulse" />
-  );
-
   return (
-    <div ref={ref} data-project-id={project.id} className="@container">
+    <div data-project-id={project.id} className="@container">
       <div
         className={`relative aspect-square cursor-pointer group overflow-hidden border transition-all duration-150
           ${isGold
@@ -106,12 +94,13 @@ export default function ProjectCard({ project, onClick }: ProjectCardProps) {
           }));
         }}
       >
-        {project.photo ? (
+        {project.photo && !imageError ? (
           <img
             src={project.photo}
             alt={project.name}
             loading="lazy"
             decoding="async"
+            onError={() => setImageError(true)}
             className={`absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105
               ${project.isPrivate ? 'opacity-40' : ''}`}
           />

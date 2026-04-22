@@ -5,6 +5,7 @@ import ProjectGrid from '../components/deployments/ProjectGrid';
 import TechMatrix from '../components/techstack/TechMatrix';
 import CoreConsole from '../components/terminal/CoreConsole';
 import Roadmap from '../components/ambitions/Roadmap';
+import CoreHome from '../components/ui/CoreHome';
 import ambitions from '../../public/data/ambitions.json';
 import identity from '../../public/data/identity.json';
 import logs from '../../public/data/logs.json';
@@ -35,13 +36,13 @@ const totalTech = techStack.length;
   <div class="w-full h-[calc(100vh-48px)] p-2 md:p-3 overflow-hidden flex flex-col gap-2 md:gap-3 boot-up">
     
     <!-- DESKTOP: 2-column layout -->
-    <div class="hidden md:grid md:grid-cols-[420px_1fr] flex-1 min-h-0 gap-3">
+    <div class="hidden lg:grid lg:grid-cols-[minmax(380px,440px)_1fr] flex-1 min-h-0 gap-3">
       
       <!-- LEFT: Identity + Console -->
       <aside class="flex flex-col gap-3 min-h-0">
         <IdentitySection {...identityData} client:idle />
-        <div class="flex-1 min-h-72 border border-white/10 bg-carbono-surface overflow-hidden">
-          <div class="h-full overflow-y-auto">
+        <div data-terminal-shell class="flex-1 min-h-80 border border-white/10 bg-carbono-surface overflow-hidden">
+          <div class="h-full overflow-hidden">
             <CoreConsole 
               logs={logs} 
               logLimit={settings.logLimit ?? 10} 
@@ -61,10 +62,13 @@ const totalTech = techStack.length;
         <!-- PROJECTS (arriba) -->
         <section class="border border-white/10 bg-carbono-surface p-3 overflow-hidden" style="flex: 1.2">
           <div class="h-full overflow-y-auto">
-            <div class="flex items-center justify-between mb-3 pb-2 border-b border-white/10 shrink-0">
-              <span class="text-[13px] font-bold text-white tracking-widest">// PROJECTS</span>
+            <div class="mb-3 shrink-0">
+              <div class="flex items-center justify-between pb-2">
+                <span class="text-[13px] font-bold text-white tracking-widest">// PROJECTS</span>
+              </div>
+              <div class="h-0.5 w-full bg-cobalt shadow-[0_0_10px_rgba(0,85,255,0.3)]"></div>
             </div>
-            <ProjectGrid client:idle />
+            <ProjectGrid projects={projects} client:idle />
           </div>
         </section>
 
@@ -74,19 +78,25 @@ const totalTech = techStack.length;
           <!-- TechStack -->
           <section class="border border-white/10 bg-carbono-surface p-3 overflow-hidden">
             <div class="h-full overflow-y-auto">
-              <div class="flex items-center justify-between mb-2 pb-2 border-b border-white/10">
-                <span class="text-[13px] font-bold text-white tracking-widest">// TECH_STACK_RECENT</span>
+              <div class="mb-2">
+                <div class="flex items-center justify-between pb-2">
+                  <span class="text-[13px] font-bold text-white tracking-widest">// TECH_STACK_RECENT</span>
+                </div>
+                <div class="h-0.5 w-full bg-cobalt shadow-[0_0_10px_rgba(0,85,255,0.3)]"></div>
               </div>
               <div class="text-[10px] text-text-faint tracking-widest uppercase opacity-60 mb-2">// from 5 featured repos (avg)</div>
-              <TechMatrix tools={techStack} client:idle />
+              <TechMatrix tools={techStack} projects={projects} client:idle />
             </div>
           </section>
 
           <!-- Roadmap -->
           <section class="border border-white/10 bg-carbono-surface p-3 overflow-hidden col-span-2">
             <div class="h-full overflow-y-auto">
-              <div class="flex items-center justify-between mb-2 pb-2 border-b border-white/10">
-                <span class="text-[13px] font-bold text-white tracking-widest">// ROADMAP</span>
+              <div class="mb-2">
+                <div class="flex items-center justify-between pb-2">
+                  <span class="text-[13px] font-bold text-white tracking-widest">// ROADMAP</span>
+                </div>
+                <div class="h-0.5 w-full bg-cobalt shadow-[0_0_10px_rgba(0,85,255,0.3)]"></div>
               </div>
               <Roadmap ambitions={ambitions} client:idle />
             </div>
@@ -97,45 +107,17 @@ const totalTech = techStack.length;
     </div>
 
     <!-- MOBILE: stacked -->
-    <div class="md:hidden flex-1 min-h-0 overflow-y-auto flex flex-col gap-3">
-      <IdentitySection {...identityData} client:idle />
-      
-      <section class="border border-white/10 bg-carbono-surface p-3">
-        <div class="flex items-center justify-between mb-2">
-          <span class="text-[13px] font-bold text-white tracking-widest">/// PROJECTS</span>
-        </div>
-        <ProjectGrid client:idle />
-      </section>
-
-      <section class="border border-white/10 bg-carbono-surface p-3">
-        <div class="flex items-center justify-between mb-2">
-          <span class="text-[13px] font-bold text-white tracking-widest">/// TERMINAL</span>
-        </div>
-        <CoreConsole 
-          logs={logs} 
-          logLimit={settings.logLimit ?? 10} 
-          projects={projects}
-          settings={settings}
-          identity={identityData}
-          techStack={techStack}
-          client:idle 
-        />
-      </section>
-
-      <section class="border border-white/10 bg-carbono-surface p-3">
-        <div class="flex items-center justify-between mb-2">
-          <span class="text-[13px] font-bold text-white tracking-widest">/// TECH_STACK</span>
-          <span class="text-[8px] text-text-faint">{techStack.length} MODULES</span>
-        </div>
-        <TechMatrix tools={techStack} client:idle />
-      </section>
-
-      <section class="border border-white/10 bg-carbono-surface p-3">
-        <div class="flex items-center justify-between mb-2">
-          <span class="text-[13px] font-bold text-white tracking-widest">/// ROADMAP</span>
-        </div>
-        <Roadmap ambitions={ambitions} client:idle />
-      </section>
+    <div class="lg:hidden flex-1 min-h-0 overflow-y-auto">
+      <CoreHome
+        identityData={identityData}
+        projects={projects}
+        techStack={techStack}
+        ambitions={ambitions}
+        logs={logs}
+        logLimit={settings.logLimit ?? 10}
+        settings={settings}
+        client:idle
+      />
     </div>
 
   </div>

@@ -62,9 +62,17 @@ async function handleGetUserRepos() {
     private: r.private,
     pushedAt: r.pushed_at,
     stars: r.stargazers_count,
-    url: r.html_url
+    url: r.html_url,
+    photo: `https://opengraph.githubassets.com/1/${r.full_name}`
   }));
   return new Response(JSON.stringify(formatted), { status: 200 });
+}
+
+async function handleGetRepoDetails(body: any) {
+  const { repoSlug } = body;
+  if (!repoSlug) throw new Error('Missing repoSlug');
+  const details = await getRepoDetails(repoSlug);
+  return new Response(JSON.stringify(details), { status: 200 });
 }
 
 async function handleGetRepoContent(body: any) {

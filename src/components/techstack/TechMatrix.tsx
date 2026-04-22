@@ -5,6 +5,7 @@ import AllTechModal from './AllTechModal';
 
 interface TechMatrixProps {
   tools?: TechTool[];
+  projects?: Project[];
 }
 
 const DEFAULT_VERSION_MAP: Record<string, string> = {
@@ -74,8 +75,8 @@ export function deriveFromProjects(projects: Project[], versionMap: Record<strin
   return result;
 }
 
-export default function TechMatrix({ tools: initialTools = [] }: TechMatrixProps) {
-  const [tools, setTools] = useState<TechTool[]>(initialTools);
+export default function TechMatrix({ tools: _initialTools = [], projects: initialProjects = [] }: TechMatrixProps) {
+  const [tools, setTools] = useState<TechTool[]>([]);
   const [toolsAll, setToolsAll] = useState<TechTool[]>([]);
   const [showAll, setShowAll] = useState(false);
   const [versionMap, setVersionMap] = useState<Record<string, string>>({});
@@ -83,7 +84,6 @@ export default function TechMatrix({ tools: initialTools = [] }: TechMatrixProps
 
   useEffect(() => {
     const loadTechStack = () => {
-      const projectStored = localStorage.getItem('portfolioProjects');
       const settingsStored = localStorage.getItem('portfolioSettings');
       let versionMapObj: Record<string, string> = {};
       try {
@@ -94,32 +94,25 @@ export default function TechMatrix({ tools: initialTools = [] }: TechMatrixProps
         }
       } catch {}
 
-      if (projectStored) {
-        const projects: Project[] = JSON.parse(projectStored);
-        const derived = deriveFromProjects(projects, versionMapObj);
-        const derivedAll = deriveFromProjects(projects, versionMapObj, Infinity);
-        if (derived.length > 0) {
-          setTools(derived);
-          setToolsAll(derivedAll);
-          return;
-        }
-      }
-      // Only show initialTools if they exist and have usage, otherwise show empty
-      if (initialTools.length > 0 && initialTools.some(t => t.usageLevel > 0)) {
-        setTools(initialTools);
-        setToolsAll(initialTools);
+      const derivedInitial = deriveFromProjects(initialProjects, versionMapObj);
+      const derivedInitialAll = deriveFromProjects(initialProjects, versionMapObj, Infinity);
+      if (derivedInitial.length > 0) {
+        setTools(derivedInitial);
+        setToolsAll(derivedInitialAll);
         return;
       }
-      // Otherwise leave empty - don't show anything
+
+      setTools([]);
+      setToolsAll([]);
     };
 
     loadTechStack();
     const handleStorageChange = (e: StorageEvent) => {
-      if (['portfolioProjects', 'portfolioTechstack', 'portfolioSettings', 'lastDataUpdate'].includes(e.key ?? '')) loadTechStack();
+      if (['portfolioSettings', 'lastDataUpdate'].includes(e.key ?? '')) loadTechStack();
     };
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
-  }, [initialTools]);
+  }, [initialProjects]);
 
   useEffect(() => {
     const glow = (ms = 1500) => { setIsGlowing(true); setTimeout(() => setIsGlowing(false), ms); };
@@ -149,7 +142,6 @@ export default function TechMatrix({ tools: initialTools = [] }: TechMatrixProps
     <>
       <div className={`flex flex-col gap-4 island-load h-full @container transition-all duration-500 ${isGlowing ? 'ring-2 ring-cobalt shadow-[0_0_20px_rgba(0,85,255,0.3)]' : ''}`}>
         <div className="flex items-center justify-between text-[10px] text-text-faint tracking-widest uppercase opacity-60 mb-1">
-          <span>// from top 5 projects (avg)</span>
           <span className="text-cobalt font-bold">● dynamic</span>
         </div>
         <div className="grid grid-cols-1 @[500px]:grid-cols-2 gap-3">

@@ -14,6 +14,7 @@ interface CoreHomeProps {
   ambitions: Ambition[];
   logs: LogEntry[];
   logLimit: number;
+  settings: any;
 }
 
 export default function CoreHome({ 
@@ -22,14 +23,27 @@ export default function CoreHome({
   techStack, 
   ambitions, 
   logs, 
-  logLimit 
+  logLimit,
+  settings,
 }: CoreHomeProps) {
   
   const masonryItems = [
     { id: 'identity', component: <IdentitySection {...identityData} /> },
-    { id: 'logs', component: <CoreConsole logs={logs} logLimit={logLimit} /> },
+    {
+      id: 'logs',
+      component: (
+        <CoreConsole
+          logs={logs}
+          logLimit={logLimit}
+          projects={projects}
+          settings={settings}
+          identity={identityData}
+          techStack={techStack}
+        />
+      ),
+    },
     { id: 'projects', component: <ProjectGrid projects={projects} /> },
-    { id: 'tech', component: <TechMatrix tools={techStack} /> },
+    { id: 'tech', component: <TechMatrix tools={techStack} projects={projects} /> },
     { id: 'roadmap', component: <Roadmap ambitions={ambitions} /> }
   ];
 

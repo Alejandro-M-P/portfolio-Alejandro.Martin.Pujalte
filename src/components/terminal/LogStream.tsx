@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { LogEntry, Project } from '../../types';
+import { parseStoredProjects, sanitizeProjects } from '../../lib/projectStorage';
+import { getAutoRefreshProjects } from '../../lib/projectRanking';
 
 const CACHE_KEY = 'portfolioGitHubLogs';
 const CACHE_TS_KEY = 'portfolioGitHubLogsTs';
@@ -81,9 +83,8 @@ function eventToEntry(e: Record<string, unknown>, index: number): LogEntry | nul
 function getUsername(): string {
   if (!isBrowser) return 'Alejandro-M-P';
   try {
-    const stored = localStorage.getItem('portfolioProjects');
-    if (!stored) return 'Alejandro-M-P';
-    const projects = JSON.parse(stored) as { specs?: Record<string, unknown> }[];
+    const projects = parseStoredProjects(localStorage.getItem('portfolioProjects'));
+    if (!projects.length) return 'Alejandro-M-P';
     for (const p of projects) {
       const slug = p.specs?.repoSlug as string | undefined;
       if (slug?.includes('/')) return slug.split('/')[0];
@@ -98,15 +99,20 @@ async function refreshProjectsFromGitHub(): Promise<void> {
   if (ts && Date.now() - Number(ts) < POLL_MS) return;
 
   try {
-    const stored = localStorage.getItem('portfolioProjects');
-    if (!stored) return;
-    const projects: Project[] = JSON.parse(stored);
-    const withRepo = projects.filter(p => p.specs?.repoSlug);
-    if (withRepo.length === 0) return;
+    const projects = parseStoredProjects(localStorage.getItem('portfolioProjects'));
+    const refreshTargets = getAutoRefreshProjects(projects).filter(p => p.specs?.repoSlug);
+    if (refreshTargets.length === 0) return;
+
+    const refreshSlugs = new Set(
+      refreshTargets
+        .map(project => project.specs?.repoSlug)
+        .filter((slug): slug is string => typeof slug === 'string' && slug.length > 0)
+    );
 
     const updated = await Promise.all(projects.map(async (project) => {
-      const repoSlug = project.specs?.repoSlug as string;
-      if (!repoSlug) return project;
+      const repoSlug = project.specs?.repoSlug as string | undefined;
+      if (!repoSlug || !refreshSlugs.has(repoSlug)) return project;
+
       try {
         const res = await fetch('/api/github', {
           method: 'POST',
@@ -130,7 +136,7 @@ async function refreshProjectsFromGitHub(): Promise<void> {
       }
     }));
 
-    localStorage.setItem('portfolioProjects', JSON.stringify(updated));
+    localStorage.setItem('portfolioProjects', JSON.stringify(sanitizeProjects(updated)));
     localStorage.setItem(PROJECTS_TS_KEY, String(Date.now()));
     window.dispatchEvent(new CustomEvent('portfolioProjectsRefreshed'));
   } catch {}
@@ -192,10 +198,9 @@ export default function LogStream({ logs, logLimit = 10, hideHeader = false }: L
       if (!res.ok) return;
       const events: Record<string, unknown>[] = await res.json();
 
-      const stored = localStorage.getItem('portfolioProjects');
       const portfolioRepos = new Set<string>();
-      if (stored) {
-        const projects = JSON.parse(stored) as { specs?: Record<string, unknown> }[];
+      const projects = parseStoredProjects(localStorage.getItem('portfolioProjects'));
+      if (projects.length) {
         for (const p of projects) {
           const slug = p.specs?.repoSlug as string | undefined;
           if (slug) portfolioRepos.add(slug.toLowerCase());
@@ -250,7 +255,7 @@ export default function LogStream({ logs, logLimit = 10, hideHeader = false }: L
     const timer = setInterval(() => {
       if (document.visibilityState === 'visible') {
         setNextSyncIn(prev => {
-          if (prev <= 1) return POLL_MS / 1000;
+          if (prev === null || prev <= 1) return POLL_MS / 1000;
           return prev - 1;
         });
       }

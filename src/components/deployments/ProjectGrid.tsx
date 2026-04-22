@@ -1,26 +1,47 @@
 import React, { useState, useEffect } from 'react';
 import type { Project } from '../../types';
+import { parseStoredProjects, sanitizeProjects } from '../../lib/projectStorage';
+import { sortProjects } from '../../lib/projectRanking';
 import ProjectCard from './ProjectCard';
 import ProjectModal from './ProjectModal';
 import AllProjectsModal from './AllProjectsModal';
 
 interface ProjectGridProps {
   projects?: Project[];
+  syncWithStorage?: boolean;
 }
 
 const INITIAL_LIMIT = 5;
 
-export default function ProjectGrid({ projects: initialProjects = [] }: ProjectGridProps) {
-  const [projects, setProjects] = useState<Project[]>(initialProjects);
+export default function ProjectGrid({ projects: initialProjects = [], syncWithStorage = false }: ProjectGridProps) {
+  const [projects, setProjects] = useState<Project[]>(sanitizeProjects(initialProjects));
   const [selected, setSelected] = useState<Project | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
-  // Client-side hydration: sync from localStorage (admin updates)
   useEffect(() => {
+    const onOpenFromTerminal = (e: any) => {
+      if (e.detail?.project) setSelected(e.detail.project);
+    };
+
+    window.addEventListener('portfolioOpenProject', onOpenFromTerminal);
+
+    return () => {
+      window.removeEventListener('portfolioOpenProject', onOpenFromTerminal);
+    };
+  }, []);
+
+  useEffect(() => {
+    setProjects(sanitizeProjects(initialProjects));
+  }, [initialProjects]);
+
+  useEffect(() => {
+    if (!syncWithStorage) return;
+
     const load = () => {
-      const stored = localStorage.getItem('portfolioProjects');
-      if (stored) { setProjects(JSON.parse(stored)); return; }
+      const sanitized = parseStoredProjects(localStorage.getItem('portfolioProjects'), sanitizeProjects(initialProjects));
+      setProjects(sanitized);
+      localStorage.setItem('portfolioProjects', JSON.stringify(sanitized));
     };
 
     load();
@@ -29,37 +50,26 @@ export default function ProjectGrid({ projects: initialProjects = [] }: ProjectG
       if (e.key === 'portfolioProjects' || e.key === 'lastDataUpdate') load();
     };
     const onRefresh = () => load();
-    const onOpenFromTerminal = (e: any) => {
-      if (e.detail?.project) setSelected(e.detail.project);
-    };
 
     window.addEventListener('storage', onStorage);
     window.addEventListener('portfolioProjectsRefreshed', onRefresh);
-    window.addEventListener('portfolioOpenProject', onOpenFromTerminal);
 
     return () => {
       window.removeEventListener('storage', onStorage);
       window.removeEventListener('portfolioProjectsRefreshed', onRefresh);
-      window.removeEventListener('portfolioOpenProject', onOpenFromTerminal);
     };
-  }, []);
+  }, [initialProjects, syncWithStorage]);
 
-  const sorted = [...projects]
-    .sort((a, b) => {
-      const aScore = (a.isHighlighted ? 2 : 0) + (a.isFavorite ? 1 : 0);
-      const bScore = (b.isHighlighted ? 2 : 0) + (b.isFavorite ? 1 : 0);
-      if (bScore !== aScore) return bScore - aScore;
-      if (a.pushedAt && b.pushedAt) return new Date(b.pushedAt).getTime() - new Date(a.pushedAt).getTime();
-      return (a.order ?? 0) - (b.order ?? 0);
-    });
+  const sorted = sortProjects(projects);
 
   const visible = expanded ? sorted : sorted.slice(0, INITIAL_LIMIT);
   const remaining = sorted.length - INITIAL_LIMIT;
+  const singleProject = visible.length === 1;
 
   return (
     <>
       <div className="@container flex flex-col gap-3 island-load">
-        <div className="grid grid-cols-1 @xs:grid-cols-2 @md:grid-cols-5 gap-1.5">
+        <div className={`${singleProject ? 'max-w-[1600px]' : ''} grid grid-cols-1 @xs:grid-cols-2 @md:grid-cols-5 gap-1.5`}>
           {visible.map(p => (
             <ProjectCard key={p.id} project={p} onClick={setSelected} />
           ))}

@@ -214,24 +214,68 @@ function ProjectsTab({ onLog }: { onLog: (msg: string) => void }) {
     }
   }, []);
 
+  function getRepoDetailsCache(): Record<string, { pushedAt: string; details: GitHubDetails }> {
+    try {
+      const raw = localStorage.getItem('portfolioRepoDetailsCache');
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  }
+
+  function setRepoDetailsCache(cache: Record<string, { pushedAt: string; details: GitHubDetails }>) {
+    localStorage.setItem('portfolioRepoDetailsCache', JSON.stringify(cache));
+  }
+
   async function loadAllRepos() {
     setLoadingRepos(true); onLog('FETCHING ALL REPOS...');
     try {
       const res = await fetch('/api/github', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'getUserRepos' }) });
       if (!res.ok) throw new Error(`GH_${res.status}`);
       const repos = await res.json();
-      onLog(`FETCHING DETAILS FOR ${repos.length} REPOS...`);
-      const detailedRepos = await Promise.all(repos.map(async (repo: any) => {
+
+      const detailsCache = getRepoDetailsCache();
+      const hydratedRepos = [];
+      let fetchedCount = 0;
+      let cachedCount = 0;
+
+      for (const repo of repos) {
+        const cached = detailsCache[repo.fullName];
+        if (cached && cached.pushedAt === repo.pushedAt) {
+          hydratedRepos.push({ ...repo, _details: cached.details });
+          cachedCount += 1;
+          continue;
+        }
+
+        // Wait 100ms between requests to avoid 429
+        await new Promise(r => setTimeout(r, 100));
+
         try {
-          const detailRes = await fetch('/api/github', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'getRepoDetails', repoSlug: repo.fullName }) });
-          if (!detailRes.ok) return { ...repo, _details: null };
-          const details = await detailRes.json();
-          return { ...repo, _details: details };
-        } catch { return { ...repo, _details: null }; }
-      }));
-      localStorage.setItem('portfolioCachedRepos', JSON.stringify(detailedRepos));
-      setAllRepos(detailedRepos); setSelectedRepos([]);
-      onLog(`CACHED ${detailedRepos.length} REPOS WITH DETAILS`);
+          const detailRes = await fetch('/api/github', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'getRepoDetails', repoSlug: repo.fullName })
+          });
+
+          if (!detailRes.ok) {
+            hydratedRepos.push({ ...repo, _details: cached?.details ?? null });
+            continue;
+          }
+
+          const details = await detailRes.json() as GitHubDetails;
+          detailsCache[repo.fullName] = { pushedAt: repo.pushedAt, details };
+          hydratedRepos.push({ ...repo, _details: details });
+          fetchedCount += 1;
+        } catch {
+          hydratedRepos.push({ ...repo, _details: cached?.details ?? null });
+        }
+      }
+
+      setRepoDetailsCache(detailsCache);
+      localStorage.setItem('portfolioCachedRepos', JSON.stringify(hydratedRepos));
+      setAllRepos(hydratedRepos);
+      setSelectedRepos([]);
+      onLog(`CACHED ${hydratedRepos.length} REPOS · ${cachedCount} FROM CACHE · ${fetchedCount} UPDATED`);
     } catch (e: any) { onLog(`ERROR: ${e.message}`); }
     finally { setLoadingRepos(false); }
   }
@@ -282,8 +326,13 @@ function ProjectsTab({ onLog }: { onLog: (msg: string) => void }) {
       if (!res.ok) throw new Error(`GH_${res.status}`);
       const r = await res.json() as GitHubDetails;
       const stackArr = Array.isArray(r.stack) ? r.stack : r.stack.split(',').map((s: string) => s.trim()).filter(Boolean);
+      
+      // If the photo from GitHub is the generic one, only use it if we don't have one
+      const isGeneric = r.photo.includes('opengraph.githubassets.com');
+      const newPhoto = (isGeneric && form.photo) ? form.photo : r.photo;
+
       setForm(f => ({
-        ...f, id: f.id || r.id, name: r.name, photo: f.photo || r.photo,
+        ...f, id: f.id || r.id, name: r.name, photo: newPhoto,
         specsDescription: r.specsDescription, specsLanguage: r.specsLanguage, specsStars: r.specsStars,
         specsRepo: r.specsRepo, specsRepoSlug: r.specsRepoSlug, specsStatus: r.specsStatus,
         pushedAt: r.pushedAt, stack: stackArr.join(', '), architecture: r.architecture || f.architecture,
@@ -320,13 +369,15 @@ function ProjectsTab({ onLog }: { onLog: (msg: string) => void }) {
   function select(p: Project) {
     setEditing(p.id); onLog(`SELECTED: ${p.name}`);
     const stackWithUsage = p.specs?.stackWithUsage as { name: string; usageLevel: number }[] | undefined;
+    const repoUrl = (p.specs?.repo as string) || '';
     setForm({ 
       ...emptyProject, id: p.id, name: p.name, photo: p.photo, video: (p.specs?.video as string) || '', 
+      gitUrl: repoUrl,
       stack: p.stack.join(', '), architecture: p.architecture, initSequence: p.initSequence, 
       description: p.description ?? '', businessImpact: p.businessImpact ?? '', 
       specsStatus: (p.specs?.status as string) || '', specsStars: (p.specs?.stars as string) || '', 
       specsLanguage: (p.specs?.language as string) || '', specsLicense: (p.specs?.license as string) || '', 
-      specsDescription: (p.specs?.description as string) || '', specsRepo: (p.specs?.repo as string) || '', 
+      specsDescription: (p.specs?.description as string) || '', specsRepo: repoUrl, 
       specsRepoSlug: (p.specs?.repoSlug as string) || '', specsDemo: (p.specs?.demo as string) || '', 
       specsTags: Array.isArray(p.specs?.tags) ? p.specs.tags.join(', ') : '', 
       isHighlighted: !!p.isHighlighted, isFavorite: !!p.isFavorite, isPrivate: !!p.isPrivate, 
@@ -353,7 +404,9 @@ function ProjectsTab({ onLog }: { onLog: (msg: string) => void }) {
                 <p className={`text-[13px] font-bold uppercase truncate ${editing === p.id ? 'text-blue-700' : 'text-slate-900'}`}>{p.name}</p>
                 {p.isFavorite && <span className="text-amber-500 text-[14px]">★</span>}
               </div>
-              <p className="text-[11px] text-slate-500 font-mono font-bold tracking-tight">{p.specs?.repoSlug || '-'}</p>
+              <p className="text-[11px] text-slate-500 font-mono font-bold tracking-tight">
+                {typeof p.specs?.repoSlug === 'string' ? p.specs.repoSlug : '-'}
+              </p>
             </div>
           ))}
         </div>
@@ -386,7 +439,13 @@ function ProjectsTab({ onLog }: { onLog: (msg: string) => void }) {
                       {repo.private && <span className="text-[10px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded">PRIVATE</span>}
                     </div>
                     <p className="text-[12px] text-slate-500 truncate">{repo.description || repo._details?.specsDescription || 'No description'}</p>
-                    <p className="text-[10px] text-cobalt mt-1">{repo._details?.stack?.join(', ') || repo.language || '-'}</p>
+                    <p className="text-[10px] text-cobalt mt-1">
+                      {Array.isArray(repo._details?.stack)
+                        ? repo._details.stack.map((item: any) => typeof item === 'string' ? item : item?.name).filter(Boolean).join(', ')
+                        : typeof repo._details?.stack === 'string'
+                          ? repo._details.stack
+                          : repo.language || '-'}
+                    </p>
                   </div>
                 </div>
               );
@@ -401,17 +460,57 @@ function ProjectsTab({ onLog }: { onLog: (msg: string) => void }) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8">
           <Field label="Module Name" required><input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className={inputClass} placeholder="e.g., SYSTEM_X" /></Field>
           
-          <div className="col-span-2 flex gap-4">
-            <Field label="GitHub URL" className="flex-1"><input value={form.gitUrl} onChange={e => setForm(f => ({ ...f, gitUrl: e.target.value }))} className={inputClass} placeholder="https://github.com/..." /></Field>
-            <button onClick={fetchGitHub} disabled={scanLoading} className="self-end h-[46px] px-8 bg-blue-600 text-white text-[13px] font-bold rounded-lg hover:bg-blue-700 transition-all shadow-md shadow-blue-100 disabled:opacity-50">
-              {scanLoading ? 'Syncing...' : 'Fetch Info'}
-            </button>
-          </div>
-
           <div className="col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-6 bg-slate-50 p-6 rounded-xl border border-slate-100">
             <CheckField label="High Value" value={form.isHighlighted} onChange={v => setForm(f => ({ ...f, isHighlighted: v }))} />
             <CheckField label="Favorite" value={form.isFavorite} onChange={v => setForm(f => ({ ...f, isFavorite: v }))} />
-            <CheckField label="Private" value={form.isPrivate} onChange={v => setForm(f => ({ ...f, isPrivate: v }))} />
+            <CheckField label="Private Module" value={form.isPrivate} onChange={v => { setForm(f => ({ ...f, isPrivate: v, gitUrl: v ? '' : f.gitUrl })); onLog(v ? 'MODE: PRIVATE_MANUAL' : 'MODE: PUBLIC_SYNC'); }} />
+          </div>
+
+          <div className="col-span-2">
+            {!form.isPrivate ? (
+              <div className="flex gap-4">
+                <Field label="GitHub URL" className="flex-1">
+                  <input value={form.gitUrl} onChange={e => setForm(f => ({ ...f, gitUrl: e.target.value }))} className={inputClass} placeholder="https://github.com/..." />
+                </Field>
+                <button onClick={fetchGitHub} disabled={scanLoading} className="self-end h-[46px] px-8 bg-blue-600 text-white text-[13px] font-bold rounded-lg hover:bg-blue-700 transition-all shadow-md shadow-blue-100 disabled:opacity-50">
+                  {scanLoading ? 'Syncing...' : 'Fetch Info'}
+                </button>
+              </div>
+            ) : (
+              <Field label="Manual README Processor (Private Mode)">
+                <div className="flex flex-col gap-3">
+                  <textarea 
+                    className={`${inputClass} h-32 font-mono text-[12px] py-4`} 
+                    placeholder="Paste README.md content here to extract Architecture and Stack..."
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      if (raw.length < 10) return;
+                      
+                      const archMatch = raw.match(/#+\s*(architect\w*|structure|design|overview)[^\n]*\n([\s\S]*?)(?=\n#+\s|\n---|$)/i);
+                      const arch = archMatch ? archMatch[2].replace(/[#*`]/g, '').trim().slice(0, 500) : '';
+                      
+                      const techMatches = raw.match(/`([A-Za-z][A-Za-z0-9+#._-]{1,20})`/g) ?? [];
+                      const stk = [...new Set(techMatches.map(t => t.replace(/`/g, '').toUpperCase()))].slice(0, 12);
+
+                      // Extract first markdown image: ![alt](url)
+                      const imgMatch = raw.match(/!\[.*?\]\((.*?)\)/);
+                      const img = imgMatch ? imgMatch[1] : '';
+                      
+                      if (arch || stk.length > 0 || img) {
+                        setForm(f => ({ 
+                          ...f, 
+                          architecture: arch || f.architecture, 
+                          stack: stk.length > 0 ? stk.join(', ') : f.stack,
+                          photo: img || f.photo 
+                        }));
+                        onLog(`EXTRACTED: ${stk.length} tags ${img ? '+ image' : ''} from manual README`);
+                      }
+                    }}
+                  />
+                  <p className="text-[11px] text-slate-400 font-medium px-1">Fields will auto-populate as you paste the content.</p>
+                </div>
+              </Field>
+            )}
           </div>
 
           <Field label="Short Overview"><input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} className={inputClass} /></Field>
@@ -420,11 +519,44 @@ function ProjectsTab({ onLog }: { onLog: (msg: string) => void }) {
           <div className="col-span-2 grid grid-cols-1 md:grid-cols-2 gap-10 border-t border-slate-100 pt-8 mt-4">
             <Field label="Image Asset">
               <div className="flex gap-2 mb-3">
-                <input value={form.photo} onChange={e => setForm(f => ({ ...f, photo: e.target.value }))} className={`${inputClass} flex-1`} />
-                <button onClick={() => photoInputRef.current?.click()} className="px-4 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-all font-bold">↑</button>
+                <input value={form.photo} onChange={e => setForm(f => ({ ...f, photo: e.target.value }))} className={`${inputClass} flex-1`} placeholder="URL or Base64 image" />
+                <button onClick={() => photoInputRef.current?.click()} className="px-3 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-all font-bold" title="Upload Local Image">↑</button>
+                {form.specsRepoSlug && (
+                  <button 
+                    onClick={() => {
+                      const previewUrl = `https://opengraph.githubassets.com/1/${form.specsRepoSlug}`;
+                      setForm(f => ({ ...f, photo: previewUrl }));
+                      onLog(`GH_PREVIEW_RECOVERED: ${form.specsRepoSlug}`);
+                    }}
+                    className="px-3 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-all font-bold text-[10px] uppercase"
+                    title="Restore GitHub Social Preview"
+                  >
+                    GIT
+                  </button>
+                )}
                 <input ref={photoInputRef} type="file" className="hidden" onChange={handlePhotoUpload} />
               </div>
-              {form.photo && <img src={form.photo} className="aspect-video w-full object-cover rounded-xl border border-slate-200 shadow-sm" />}
+              {form.photo ? (
+                <div className="relative group">
+                  <img 
+                    key={form.photo}
+                    src={form.photo} 
+                    alt="Preview"
+                    className="aspect-video w-full object-cover rounded-xl border border-slate-200 shadow-sm"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = 'https://placehold.co/600x400/f8fafc/64748b?text=Invalid+Image+URL';
+                      onLog('IMG_LOAD_ERROR: Check URL format');
+                    }}
+                  />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-xl flex items-center justify-center">
+                    <button onClick={() => setForm(f => ({ ...f, photo: '' }))} className="bg-white text-red-500 px-4 py-2 rounded-lg font-bold text-[12px]">Remove Image</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="aspect-video bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl flex items-center justify-center">
+                  <p className="text-[12px] text-slate-400 font-medium">No image asset defined</p>
+                </div>
+              )}
             </Field>
             <Field label="Video Link">
               <input value={form.video} onChange={e => setForm(f => ({ ...f, video: e.target.value }))} className={`${inputClass} mb-3`} />
@@ -705,7 +837,14 @@ function SettingsTab({ onLog }: { onLog: (msg: string) => void }) {
 
   function addRoadmapLabel() {
     if (!labelInput.label || !labelInput.timeframe) return;
-    update({ roadmapLabels: { ...settings.roadmapLabels, [labelInput.section]: { label: labelInput.label, timeframe: labelInput.timeframe } } });
+    update({
+      roadmapLabels: {
+        short: settings.roadmapLabels?.short ?? { label: '', timeframe: '' },
+        mid: settings.roadmapLabels?.mid ?? { label: '', timeframe: '' },
+        long: settings.roadmapLabels?.long ?? { label: '', timeframe: '' },
+        [labelInput.section]: { label: labelInput.label, timeframe: labelInput.timeframe }
+      }
+    });
     setLabelInput({ section: 'short', label: '', timeframe: '' });
     onLog(`ROADMAP_LABEL_UPDATED: ${labelInput.section}`);
   }

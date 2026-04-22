@@ -53,7 +53,11 @@ export function parseReadmeFallback(raw: string) {
   const architecture = archMatch ? archMatch[2].replace(/```[\s\S]*?```/g, '').replace(/[#*`]/g, '').trim().slice(0, 400) : '';
   const techMatches = raw.match(/`([A-Za-z][A-Za-z0-9+#._-]{1,20})`/g) ?? [];
   const stack = [...new Set(techMatches.map(t => t.replace(/`/g, '').toUpperCase()))].slice(0, 12);
-  return { architecture, stack };
+  
+  const imgMatch = raw.match(/!\[.*?\]\((.*?)\)/);
+  const photo = imgMatch ? imgMatch[1] : '';
+
+  return { architecture, stack, photo };
 }
 
 export async function getRepoDetails(repoSlug: string) {
@@ -95,11 +99,15 @@ export async function getRepoDetails(repoSlug: string) {
       usageLevel: langPercentages[name] ?? 50,
     }));
 
-    if (metadata.architecture || metadata.stack) {
+    if (metadata.architecture || metadata.stack || metadata.photo || metadata.image) {
       architecture = metadata.architecture || '';
+      // Use photo from metadata if available
     } else {
       const fallback = parseReadmeFallback(rawContent);
       architecture = fallback.architecture;
+      if (!metadata.photo && !metadata.image) {
+        metadata.photo = fallback.photo;
+      }
     }
   } else {
     stack = Object.keys(langs).join(', ').toUpperCase().split(',').map(s => s.trim()).filter(Boolean);
@@ -112,7 +120,7 @@ export async function getRepoDetails(repoSlug: string) {
   return {
     id: r.name.toUpperCase().replace(/-/g, '_'),
     name: r.name.toUpperCase().replace(/-/g, '_'),
-    photo: r.open_graph_image_url || `https://opengraph.githubassets.com/1/${repoSlug}`,
+    photo: metadata.photo || metadata.image || `https://opengraph.githubassets.com/1/${repoSlug}`,
     specsDescription: r.description || metadata.description || '',
     specsLanguage: r.language || metadata.language || '',
     specsStars: String(r.stargazers_count),
