@@ -1,11 +1,13 @@
 {
   "name": "ALEJANDRO.MARTIN.PUJALTE",
   "handle": "@Alejandro-M-P",
-  "bio": "Building structurally honest systems. Skeptical by design, focused on local AI and conceptual rigor.",
+  "bio": "I build systems that hold under pressure — not just in demos. Focused on local AI infrastructure and software architecture. I ask why before I ask how. That's where the real work starts.",
+  "contactEmail": "martinpujaltea@gmail.com",
+  "birthDate": "2007-12-17",
   "status": "ONLINE",
   "availabilityValue": 100,
   "cvUrl": "/cv.pdf",
-  "linkedinUrl": "https://www.linkedin.com/in/alejandro-martin-9a337237b/",
+  "linkedinUrl": "https://www.linkedin.com/in/alejandro-martin-9a337237b",
   "links": [
     { "label": "GITHUB →", "href": "https://github.com/Alejandro-M-P" }
   ]

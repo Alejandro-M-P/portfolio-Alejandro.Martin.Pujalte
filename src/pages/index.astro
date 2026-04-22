@@ -19,6 +19,7 @@ const identityData = {
   availabilityValue: settings.availabilityValue ?? identity.availabilityValue,
   cvUrl: settings.cvUrl ?? identity.cvUrl,
   linkedinUrl: settings.linkedinUrl ?? identity.linkedinUrl,
+  birthDate: settings.birthDate ?? (identity as any).birthDate,
 };
 
 const totalProjects = projects.length;

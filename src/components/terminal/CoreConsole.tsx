@@ -20,11 +20,10 @@ const VFS_BASE: any = {
         type: 'dir',
         children: {
           'kernel.log': { type: 'file', content: '[OK] Kernel 6.8.0-core-stable\n[OK] All modules loaded.' },
-          'git.log': { type: 'file', content: 'commit 8f2d3a1 (HEAD -> main)\nAuthor: AlejandroMP\nDate:   Recently\n\n    feat: implemented mcp protocol layer for ai-orchestration\n\ncommit 4c1b92e\nAuthor: AlejandroMP\n\n    refactor: optimized vfs memory footprint for guest sessions\n\ncommit 2a9f11d\n\n    fix: resolved race condition in activity-log stream' },
           'activity.log': { type: 'file', content: '' },
           'infra.yaml': { 
             type: 'file', 
-            content: 'environment:\n  provider: Vercel\n  runtime: Node.js 20.x\n  framework: Astro v4.5\n  deployment: Edge Network\n\nsecurity:\n  handshake: RecruiterSync-v1\n  access: GUEST_ROOT\n  encryption: RSA-4096' 
+            content: 'environment:\n  provider: Vercel\n  runtime: Node.js 22.x\n  framework: Astro v5.18\n  deployment: Edge Network\n\nsecurity:\n  handshake: RecruiterSync-v1\n  access: GUEST_ROOT\n  encryption: RSA-4096'
           },
           'env.local': { type: 'file', content: 'STATION_NAME=Core-01\nOPERATOR=AlejandroMP\nSESSION_TYPE=RECRUITER_SYNC\nSTATUS=ONLINE' }
         }
@@ -157,18 +156,18 @@ function execute(raw: string, ctx: ExecuteContext): string[] | '__PURGE__' {
       const secretCmds = ['sudo', 'approve', 'hire-me', 'matrix', 'glitch', 'rm', 'top', 'coffee', 'ssh', 'stars'];
       
       if (isFull) {
-        const lines = [`${C.bold}${C.white}// FULL_SYSTEM_PROTOCOLS (UNRESTRICTED)${C.reset}`, o('─────────────────────────────────────────────')];
+        const lines = [
+          `${C.bold}${C.magenta}// CLASSIFIED_PROTOCOLS${C.reset}`,
+          o('─────────────────────────────────────────────'),
+        ];
         let row = '';
-        const all = [...publicCmds, ...secretCmds].sort();
-        all.forEach((c, idx) => {
-          const isSecret = secretCmds.includes(c);
-          const styled = isSecret ? `${C.magenta}${c}${C.reset}` : g(c);
-          row += styled.padEnd(isSecret ? 23 : 14); // Adjust padding for ANSI codes
+        secretCmds.forEach((c, idx) => {
+          row += `${C.magenta}${c.padEnd(12)}${C.reset}`;
           if ((idx + 1) % 3 === 0) { lines.push(row); row = ''; }
         });
         if (row) lines.push(row);
         lines.push(o('─────────────────────────────────────────────'));
-        lines.push(`${C.magenta}●${C.reset} ${o('— Restricted/Secret Protocol')}`);
+        lines.push(`${C.magenta}●${C.reset} ${o('— Restricted access. Use at your own risk.')}`);
         return lines;
       }
 
@@ -249,7 +248,7 @@ function execute(raw: string, ctx: ExecuteContext): string[] | '__PURGE__' {
         const file = resolved.node;
         dispatchSystemEvent('cat-read', { file: target });
         
-        // Smart trigger: if it's a project file, highlight in UI
+        // Smart trigger: if it's a project file, highlight in UI and open modal
         if (target.includes('projects/') || (currentPath.includes('projects') && target.endsWith('.project'))) {
           const filename = target.split('/').pop() || '';
           const projectId = filename.replace('.project', '');
@@ -258,6 +257,10 @@ function execute(raw: string, ctx: ExecuteContext): string[] | '__PURGE__' {
             el.scrollIntoView({ behavior: 'smooth', block: 'center' });
             el.classList.add('hdr-glitch');
             setTimeout(() => el.classList.remove('hdr-glitch'), 1000);
+          }
+          const project = projects.find((p: Project) => p.id === projectId);
+          if (project) {
+            setTimeout(() => window.dispatchEvent(new CustomEvent('portfolioOpenProject', { detail: { project } })), 500);
           }
         }
         
@@ -290,6 +293,7 @@ function execute(raw: string, ctx: ExecuteContext): string[] | '__PURGE__' {
 
     case 'scan': {
       dispatchSystemEvent('deep-scan');
+      window.dispatchEvent(new CustomEvent('portfolioTerminalScan'));
       return [
         g(`[RUNNING] NETWORK_SCAN...`),
         o(`Checking VFS integrity: [OK]`),
@@ -332,7 +336,7 @@ function execute(raw: string, ctx: ExecuteContext): string[] | '__PURGE__' {
     }
 
     case 'approve': {
-      const email = settings.contactEmail || 'martinpujaltea@gmail.com';
+      const email = settings.contactEmail || identity?.contactEmail || 'martinpujaltea@gmail.com';
       setTimeout(() => {
         window.location.href = `mailto:${email}?subject=Core System Approval - AlejandroMP&body=Hi Alejandro, I have reviewed your Core System and I would like to move forward with your application.`;
       }, 2000);
@@ -352,10 +356,11 @@ function execute(raw: string, ctx: ExecuteContext): string[] | '__PURGE__' {
 
     case 'whoami': {
       const name = identity?.name?.replace('\n', ' ') || 'AlejandroMP';
+      dispatchSystemEvent('whoami');
       return [
-        g(`{`), 
-        g(`  "session": "RECRUITER_INVITEE",`), 
-        g(`  "host": "${name}",`), 
+        g(`{`),
+        g(`  "session": "RECRUITER_INVITEE",`),
+        g(`  "host": "${name}",`),
         g(`  "access_level": "GUEST_ROOT",`),
         g(`  "message": "Welcome to my core. You are part of the system now."`),
         g(`}`)
@@ -427,7 +432,7 @@ function execute(raw: string, ctx: ExecuteContext): string[] | '__PURGE__' {
     }
 
     case 'hire-me': {
-      const contactBtn = document.querySelector('[data-contact-button]') || document.querySelector('button:contains("CONTACT")');
+      const contactBtn = document.querySelector('[data-contact-button]') as HTMLElement | null;
       if (contactBtn) {
         (contactBtn as HTMLElement).classList.add('ring-4', 'ring-cobalt', 'animate-pulse');
         setTimeout(() => (contactBtn as HTMLElement).classList.remove('ring-4', 'ring-cobalt', 'animate-pulse'), 5000);
@@ -436,7 +441,7 @@ function execute(raw: string, ctx: ExecuteContext): string[] | '__PURGE__' {
         g('Initializing hire sequence...'), 
         o(BAR), 
         g('✓ Background check cleared'), 
-        w('→ Direct Line: martinpujaltea@gmail.com'),
+        w(`→ Direct Line: ${settings.contactEmail || identity?.contactEmail || 'martinpujaltea@gmail.com'}`),
         g('Ready to join your team. Contact module highlighted.')
       ];
     }
@@ -475,8 +480,25 @@ export default function CoreConsole({
   const history = useRef<string[]>([]);
   const historyIdx = useRef(-1);
   const modeRef = useRef<'logs' | 'terminal'>(mode);
+  const liveProjectsRef = useRef<Project[]>(projects);
   
   useEffect(() => { modeRef.current = mode; sessionStorage.setItem('terminal_mode', mode); }, [mode]);
+
+  useEffect(() => {
+    const load = () => {
+      const stored = localStorage.getItem('portfolioProjects');
+      liveProjectsRef.current = stored ? JSON.parse(stored) : projects;
+    };
+    load();
+    const onRefresh = () => load();
+    const onStorage = (e: StorageEvent) => { if (e.key === 'portfolioProjects' || e.key === 'lastDataUpdate') load(); };
+    window.addEventListener('portfolioProjectsRefreshed', onRefresh);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener('portfolioProjectsRefreshed', onRefresh);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, [projects]);
 
   const enterTerminal = useCallback(() => { if (modeRef.current === 'terminal') return; setPhase('crt-off'); setTimeout(() => { setMode('terminal'); setPhase('crt-boot'); setTimeout(() => setPhase('idle'), 600); }, 350); }, []);
   const exitTerminal = useCallback(() => { if (modeRef.current === 'logs') return; setPhase('crt-off'); setTimeout(() => { setMode('logs'); setPhase('crt-boot'); setTimeout(() => setPhase('idle'), 500); }, 350); }, []);
@@ -514,7 +536,7 @@ export default function CoreConsole({
           term.writeln(''); const raw = inputBuf.current; inputBuf.current = '';
           if (raw.trim()) history.current = [raw, ...history.current].slice(0, 50);
           
-          const result = execute(raw, { projects, settings, identity, techStack, logs, exitTerminal, currentPath, setPath: setCurrentPath });
+          const result = execute(raw, { projects: liveProjectsRef.current, settings, identity, techStack, logs, exitTerminal, currentPath, setPath: setCurrentPath });
 
           if (result === '__PURGE__') {
             const roadmap = document.querySelector('section[data-section="roadmap"]') || document.querySelector('main > div > section:nth-child(2)');

@@ -56,6 +56,8 @@ export interface SiteSettings {
   logLimit?: number;
   cvUrl?: string;
   linkedinUrl?: string;
+  contactEmail?: string;
+  birthDate?: string;
   versionMap?: Record<string, string>;
   roadmapLabels?: {
     short: { label: string; timeframe: string };

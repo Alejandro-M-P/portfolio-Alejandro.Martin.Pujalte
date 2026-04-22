@@ -747,6 +747,9 @@ function SettingsTab({ onLog }: { onLog: (msg: string) => void }) {
           <Field label={`Gold Stars Requirement: ${settings.starsForGold}`}>
             <input type="range" min={0} max={50} value={settings.starsForGold} onChange={e => update({ starsForGold: Number(e.target.value) })} className="w-full h-2 bg-slate-100 rounded-full appearance-none accent-amber-500 cursor-pointer" />
           </Field>
+          <Field label="Birth Date (age auto-calculation)">
+            <input type="date" value={settings.birthDate || ''} onChange={e => update({ birthDate: e.target.value })} className={inputClass} placeholder="YYYY-MM-DD" />
+          </Field>
           <div className="pt-10 border-t border-slate-100">
             <button onClick={() => { if(confirm('Wipe local buffers?')) { localStorage.clear(); window.location.reload(); } }} className="w-full py-4 text-red-500 font-bold border border-red-100 bg-red-50 rounded-xl hover:bg-red-100 transition-all">Clear Local Cache</button>
           </div>
@@ -873,7 +876,10 @@ export default function AdminPanel() {
             </button>
           ))}
         </nav>
-        <div className="p-8 border-t border-slate-50">
+        <div className="p-8 border-t border-slate-50 flex flex-col gap-3">
+          <a href="/" className="w-full flex items-center justify-center gap-3 px-4 py-3 text-[12px] text-slate-600 font-bold bg-slate-100 rounded-lg hover:bg-slate-200 transition-all">
+            <span>↗</span> View Portfolio
+          </a>
           <button onClick={() => { sessionStorage.removeItem(SESSION_KEY); window.location.reload(); }} className="w-full flex items-center justify-center gap-3 px-4 py-3 text-[12px] text-red-500 font-bold bg-red-50 rounded-lg hover:bg-red-100 transition-all">
             <span>✕</span> Logout
           </button>

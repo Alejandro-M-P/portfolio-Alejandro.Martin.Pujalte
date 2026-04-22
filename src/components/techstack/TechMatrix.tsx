@@ -24,12 +24,12 @@ const DEFAULT_VERSION_MAP: Record<string, string> = {
   'NODE.JS': 'v22+',
 };
 
-export function deriveFromProjects(projects: Project[], versionMap: Record<string, string> = {}): TechTool[] {
+export function deriveFromProjects(projects: Project[], versionMap: Record<string, string> = {}, maxProjects = 5): TechTool[] {
   if (!projects.length) return [];
-  
+
   const validProjects = projects.filter(p => p.stack && p.stack.length > 0);
   if (validProjects.length === 0) return [];
-  
+
   const sorted = [...validProjects]
     .sort((a, b) => {
       const aScore = (a.isHighlighted ? 2 : 0) + (a.isFavorite ? 1 : 0);
@@ -38,7 +38,7 @@ export function deriveFromProjects(projects: Project[], versionMap: Record<strin
       if (a.pushedAt && b.pushedAt) return new Date(b.pushedAt).getTime() - new Date(a.pushedAt).getTime();
       return (a.order ?? 0) - (b.order ?? 0);
     })
-    .slice(0, 5);
+    .slice(0, maxProjects);
   
   const techUsages: Record<string, number> = {};
   const techCounts: Record<string, number> = {};
@@ -76,8 +76,10 @@ export function deriveFromProjects(projects: Project[], versionMap: Record<strin
 
 export default function TechMatrix({ tools: initialTools = [] }: TechMatrixProps) {
   const [tools, setTools] = useState<TechTool[]>(initialTools);
+  const [toolsAll, setToolsAll] = useState<TechTool[]>([]);
   const [showAll, setShowAll] = useState(false);
   const [versionMap, setVersionMap] = useState<Record<string, string>>({});
+  const [isGlowing, setIsGlowing] = useState(false);
 
   useEffect(() => {
     const loadTechStack = () => {
@@ -95,14 +97,17 @@ export default function TechMatrix({ tools: initialTools = [] }: TechMatrixProps
       if (projectStored) {
         const projects: Project[] = JSON.parse(projectStored);
         const derived = deriveFromProjects(projects, versionMapObj);
+        const derivedAll = deriveFromProjects(projects, versionMapObj, Infinity);
         if (derived.length > 0) {
           setTools(derived);
+          setToolsAll(derivedAll);
           return;
         }
       }
       // Only show initialTools if they exist and have usage, otherwise show empty
       if (initialTools.length > 0 && initialTools.some(t => t.usageLevel > 0)) {
         setTools(initialTools);
+        setToolsAll(initialTools);
         return;
       }
       // Otherwise leave empty - don't show anything
@@ -116,6 +121,22 @@ export default function TechMatrix({ tools: initialTools = [] }: TechMatrixProps
     return () => window.removeEventListener('storage', handleStorageChange);
   }, [initialTools]);
 
+  useEffect(() => {
+    const glow = (ms = 1500) => { setIsGlowing(true); setTimeout(() => setIsGlowing(false), ms); };
+    const onScan = () => glow(1800);
+    const onAction = (e: any) => {
+      const { action, section } = e.detail ?? {};
+      if (action === 'focus-section' && section === 'tech') glow(2000);
+      if (action === 'deep-scan') glow(1500);
+    };
+    window.addEventListener('portfolioTerminalScan', onScan);
+    window.addEventListener('portfolioConsoleAction', onAction);
+    return () => {
+      window.removeEventListener('portfolioTerminalScan', onScan);
+      window.removeEventListener('portfolioConsoleAction', onAction);
+    };
+  }, []);
+
   if (tools.length === 0) {
     return (
       <div className="border border-white/10 bg-carbono-surface p-8 text-center island-fade">
@@ -126,12 +147,11 @@ export default function TechMatrix({ tools: initialTools = [] }: TechMatrixProps
 
   return (
     <>
-      <div className="flex flex-col gap-4 island-load h-full @container">
+      <div className={`flex flex-col gap-4 island-load h-full @container transition-all duration-500 ${isGlowing ? 'ring-2 ring-cobalt shadow-[0_0_20px_rgba(0,85,255,0.3)]' : ''}`}>
         <div className="flex items-center justify-between text-[10px] text-text-faint tracking-widest uppercase opacity-60 mb-1">
           <span>// from top 5 projects (avg)</span>
           <span className="text-cobalt font-bold">● dynamic</span>
         </div>
-        {/* Usamos @container: si mide menos de 500px, apilamos de a uno */}
         <div className="grid grid-cols-1 @[500px]:grid-cols-2 gap-3">
           {tools.map((tool) => (
             <div key={tool.name} className="border border-white/10 bg-carbono p-3 flex flex-col gap-2 hover:border-cobalt/40 transition-colors">
@@ -148,9 +168,18 @@ export default function TechMatrix({ tools: initialTools = [] }: TechMatrixProps
             </div>
           ))}
         </div>
+
+        {toolsAll.length > tools.length && (
+          <button
+            onClick={() => setShowAll(true)}
+            className="self-end text-[11px] text-cobalt hover:text-white tracking-widest uppercase border border-cobalt/40 hover:border-cobalt hover:bg-cobalt/10 px-4 py-1.5 transition-colors duration-150 cursor-pointer"
+          >
+            [+] ALL_TECH ({toolsAll.length})
+          </button>
+        )}
       </div>
 
-      {showAll && <AllTechModal tools={tools} onClose={() => setShowAll(false)} />}
+      {showAll && <AllTechModal tools={toolsAll} onClose={() => setShowAll(false)} />}
     </>
   );
 }

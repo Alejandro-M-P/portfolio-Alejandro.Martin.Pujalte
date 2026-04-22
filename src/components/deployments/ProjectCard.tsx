@@ -16,6 +16,15 @@ function loadSettings(): SiteSettings {
   return DEFAULT_SETTINGS;
 }
 
+function getDustLabel(pushedAt: string | undefined, thresholdDays: number): string | null {
+  if (!pushedAt) return null;
+  const days = (Date.now() - new Date(pushedAt).getTime()) / 86_400_000;
+  if (days < thresholdDays) return null;
+  if (days < thresholdDays * 2) return 'STABLE';
+  if (days < thresholdDays * 3) return 'LEGACY';
+  return 'ARCHIVED';
+}
+
 function getEntropyStyle(pushedAt: string | undefined, thresholdDays: number): React.CSSProperties {
   if (!pushedAt) return {};
   const days = (Date.now() - new Date(pushedAt).getTime()) / 86_400_000;
@@ -59,9 +68,10 @@ export default function ProjectCard({ project, onClick }: ProjectCardProps) {
     return () => observer.disconnect();
   }, []);
 
-  const stars  = Number(project.specs?.stars ?? 0);
-  const status = project.specs?.status as string | undefined;
-  const isGold = !!(project.isHighlighted || stars >= settings.starsForGold);
+  const stars     = Number(project.specs?.stars ?? 0);
+  const status    = project.specs?.status as string | undefined;
+  const isGold    = !!(project.isHighlighted || stars >= settings.starsForGold);
+  const dustLabel = isGold ? null : getDustLabel(project.pushedAt, settings.dustThresholdDays);
   const entropyStyle = isGold ? {} : getEntropyStyle(project.pushedAt, settings.dustThresholdDays);
 
   if (!visible) return (
@@ -137,6 +147,11 @@ export default function ProjectCard({ project, onClick }: ProjectCardProps) {
           {project.isFavorite && (
             <span className={`text-[10px] font-bold tracking-widest uppercase border px-2 py-1 leading-none text-bronze border-bronze/50 bg-bronze/20 backdrop-blur-sm`}>
               PINNED
+            </span>
+          )}
+          {dustLabel && (
+            <span className="text-[9px] font-bold tracking-widest uppercase border px-2 py-1 leading-none text-white/35 border-white/15 bg-black/50 backdrop-blur-sm">
+              {dustLabel}
             </span>
           )}
         </div>

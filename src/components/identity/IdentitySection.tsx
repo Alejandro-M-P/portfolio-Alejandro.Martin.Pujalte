@@ -7,15 +7,31 @@ interface IdentityProps {
   name: string;
   handle: string;
   bio: string;
-  quote: string;
+  quote?: string;
   status: 'ONLINE' | 'OFFLINE' | 'BUSY';
   availabilityValue?: number;
   cvUrl?: string;
   linkedinUrl?: string;
+  contactEmail?: string;
+  birthDate?: string;
   links?: { label: string; href: string }[];
 }
 
-export default function IdentitySection({ name, handle, bio, quote, status, availabilityValue, cvUrl, linkedinUrl, links = [] }: IdentityProps) {
+function calculateAge(birthDate: string): number | null {
+  try {
+    const birth = new Date(birthDate);
+    if (isNaN(birth.getTime())) return null;
+    const today = new Date();
+    let age = today.getFullYear() - birth.getFullYear();
+    const m = today.getMonth() - birth.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+    return age;
+  } catch {
+    return null;
+  }
+}
+
+export default function IdentitySection({ name, handle, bio, quote, status, availabilityValue, cvUrl, linkedinUrl, contactEmail, birthDate, links = [] }: IdentityProps) {
   const [imgError, setImgError] = React.useState(false);
   const [isGlowing, setIsGlowing] = useState(false);
 
@@ -30,9 +46,9 @@ export default function IdentitySection({ name, handle, bio, quote, status, avai
         setIsGlowing(true);
         setTimeout(() => setIsGlowing(false), 1500);
       }
-      if (action === 'tree-radar' || action === 'deep-scan') {
+      if (action === 'tree-radar' || action === 'deep-scan' || action === 'whoami') {
         setIsGlowing(true);
-        setTimeout(() => setIsGlowing(false), 1500);
+        setTimeout(() => setIsGlowing(false), 2000);
       }
     };
 
@@ -87,6 +103,9 @@ export default function IdentitySection({ name, handle, bio, quote, status, avai
             <div className="flex flex-col gap-0.5">
               <h1 className="text-xl @[450px]:text-lg font-bold tracking-tight text-white leading-tight drop-shadow-md">
                 {name.replace('\n', ' ')}
+                {birthDate && calculateAge(birthDate) !== null && (
+                  <span className="text-[13px] font-normal text-white/70 ml-2">({calculateAge(birthDate)})</span>
+                )}
               </h1>
               <span className="text-[11px] text-white/50 @[450px]:text-text-faint tracking-widest uppercase drop-shadow-sm">
                 {handle}
@@ -103,15 +122,20 @@ export default function IdentitySection({ name, handle, bio, quote, status, avai
             <AvailabilityBar value={availabilityValue} />
             
             <div className="flex flex-col gap-2.5">
-              <ContactButton />
+              <ContactButton href={contactEmail ? `mailto:${contactEmail}` : undefined} />
 
               {cvUrl && (
-                <button
-                  onClick={() => forceDownload(cvUrl, 'Alejandro-CV.pdf')}
-                  className="block w-full bg-cobalt text-white text-center text-[11px] font-bold tracking-widest uppercase px-4 py-3 hover:bg-cobalt/80 transition-all duration-150 active:scale-[0.98] shadow-lg shadow-cobalt/20 cursor-pointer"
-                >
-                  ↓ DOWNLOAD_CV
-                </button>
+                <>
+                  <button
+                    onClick={() => forceDownload(cvUrl, 'Alejandro-CV.pdf')}
+                    className="block w-full bg-cobalt text-white text-center text-[11px] font-bold tracking-widest uppercase px-4 py-3 hover:bg-cobalt/80 transition-all duration-150 active:scale-[0.98] shadow-lg shadow-cobalt/20 cursor-pointer"
+                  >
+                    ↓ DOWNLOAD_CV
+                  </button>
+                  <p className="text-[10px] text-text-faint tracking-widest text-center opacity-50">
+                    // work history & experience → CV
+                  </p>
+                </>
               )}
 
               {linkedinUrl && (
