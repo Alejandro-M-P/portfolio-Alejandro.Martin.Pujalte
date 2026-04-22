@@ -80,10 +80,10 @@ export default function IdentitySection({ name, handle, bio, quote, status, avai
       data-section="identity" 
       className={`industrial-panel flex flex-col relative z-10 island-load overflow-hidden shadow-2xl transition-all duration-500 ${isGlowing ? 'ring-2 ring-cobalt shadow-[0_0_25px_rgba(0,85,255,0.4)]' : ''}`}
     >
-      <div className="flex flex-col @container">
-        {/* Header con foto y nombre - Forzamos horizontal si hay >300px (el sidebar tiene 380px) */}
-        <div className="relative w-full bg-carbono-mid @[300px]:flex @[300px]:h-28 border-b border-white/5">
-          <div className="relative w-full h-64 @[300px]:w-28 @[300px]:h-full shrink-0">
+      <div className="flex flex-col @container h-full">
+        {/* Header Adaptativo: Horizontal en pantallas bajas, Vertical en pantallas altas */}
+        <div className="relative w-full bg-carbono-mid flex flex-row min-[1200px]:min-h-[450px]:flex-col min-[1200px]:min-h-[450px]:h-auto h-28 border-b border-white/5 transition-all duration-500">
+          <div className="relative w-28 min-[1200px]:min-h-[450px]:w-full min-[1200px]:min-h-[450px]:h-64 h-full shrink-0 overflow-hidden">
             {!imgError ? (
               <img
                 src="/profile.jpg"
@@ -92,22 +92,23 @@ export default function IdentitySection({ name, handle, bio, quote, status, avai
                 onError={() => setImgError(true)}
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-[13px] text-text-faint tracking-widest">NO_SIGNAL</div>
+              <div className="w-full h-full flex items-center justify-center text-[13px] text-text-faint tracking-widest uppercase">NO_SIGNAL</div>
             )}
-            <div className="absolute inset-0 bg-linear-to-t from-carbono-surface/80 via-transparent to-transparent @[300px]:hidden" />
+            {/* Gradiente solo visible en modo vertical */}
+            <div className="absolute inset-0 bg-linear-to-t from-carbono-surface/90 via-transparent to-transparent hidden min-[1200px]:min-h-[450px]:block" />
           </div>
           
-          {/* Nombre y status - Aparecen sobre la foto en vertical, al lado en horizontal */}
-          <div className="absolute bottom-3 left-4 @[300px]:static @[300px]:p-4 @[300px]:flex-1 @[300px]:flex @[300px]:flex-col @[300px]:justify-center">
+          {/* Nombre y status */}
+          <div className="p-4 flex-1 flex flex-col justify-center min-[1200px]:min-h-[450px]:absolute min-[1200px]:min-h-[450px]:bottom-0 min-[1200px]:min-h-[450px]:left-0 min-[1200px]:min-h-[450px]:w-full min-[1200px]:min-h-[450px]:p-5 min-[1200px]:min-h-[450px]:bg-linear-to-t min-[1200px]:min-h-[450px]:from-black/80 min-[1200px]:min-h-[450px]:to-transparent">
             <Pill variant="cobalt" className="text-[10px] mb-1.5 w-fit shadow-lg shadow-cobalt/20">{status}</Pill>
             <div className="flex flex-col gap-0.5">
-              <h1 className="text-[1.15rem] @[300px]:text-base font-bold tracking-tight text-white leading-tight drop-shadow-md">
+              <h1 className="text-[14px] min-[1200px]:min-h-[450px]:text-[18px] font-bold tracking-tight text-white leading-tight drop-shadow-md">
                 {name.replace('\n', ' ')}
                 {birthDate && calculateAge(birthDate) !== null && (
-                  <span className="text-[13px] font-normal text-white/70 ml-2">({calculateAge(birthDate)})</span>
+                  <span className="text-[12px] font-normal text-white/70 ml-2 opacity-80">({calculateAge(birthDate)})</span>
                 )}
               </h1>
-              <span className="text-[11px] text-white/50 @[300px]:text-text-faint tracking-widest uppercase drop-shadow-sm">
+              <span className="text-[10px] min-[1200px]:min-h-[450px]:text-[11px] text-text-faint tracking-[0.15em] uppercase drop-shadow-sm">
                 {handle}
               </span>
             </div>
