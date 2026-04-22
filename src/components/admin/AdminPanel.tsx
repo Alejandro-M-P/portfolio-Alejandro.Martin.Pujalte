@@ -84,9 +84,8 @@ function CheckField({ label, value, onChange }: { label: string; value: boolean;
 /* ─── Password Gate ─── */
 
 function PasswordGate({ onAuth }: { onAuth: () => void }) {
-  const [pw, setPw] = useState('');
-  const [err, setErr] = useState('');
   const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState('');
   const [countdown, setCountdown] = useState(0);
 
   useEffect(() => {
@@ -95,39 +94,55 @@ function PasswordGate({ onAuth }: { onAuth: () => void }) {
     setCountdown(0);
   }, []);
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault(); if (loading) return;
+  async function startOAuth() {
     setLoading(true);
     setErr('');
-    
     try {
-      const res = await fetch('/api/auth', {
+      const res = await fetch('/api/github-oauth', { method: 'GET' });
+      if (!res.ok) throw new Error('OAUTH_INIT_FAILED');
+      const data = await res.json().catch(() => ({}));
+      if (data.error) throw new Error(data.error);
+      window.location.href = data.url || data.location || '/api/github-oauth';
+    } catch (e: any) {
+      setErr(e.message || 'CONNECTION_FAILURE');
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    if (code) {
+      setLoading(true);
+      handleCallback(code);
+      setTimeout(() => {
+        window.history.replaceState({}, '', '/admin');
+      }, 1000);
+    }
+  }, []);
+
+  async function handleCallback(code: string) {
+    try {
+      const res = await fetch('/api/github-oauth', {
         method: 'POST',
         headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: pw.trim() })
+        body: JSON.stringify({ code })
       });
 
       if (res.ok) {
-        localStorage.removeItem(ATTEMPTS_KEY); localStorage.removeItem(LOCKOUT_KEY);
-        sessionStorage.setItem(SESSION_KEY, 'true'); sessionStorage.setItem(SESSION_TS, String(Date.now()));
+        localStorage.removeItem(ATTEMPTS_KEY);
+        localStorage.removeItem(LOCKOUT_KEY);
+        sessionStorage.setItem(SESSION_KEY, 'true');
+        sessionStorage.setItem(SESSION_TS, String(Date.now()));
         onAuth();
       } else {
-        const data = await res.json().catch(() => ({ error: 'SERVER_ERROR' }));
-        const attempts = Number(localStorage.getItem(ATTEMPTS_KEY) ?? 0) + 1;
-        localStorage.setItem(ATTEMPTS_KEY, String(attempts));
-        
-        if (attempts >= MAX_ATTEMPTS) {
-          localStorage.setItem(LOCKOUT_KEY, String(Date.now() + LOCKOUT_MS));
-          setErr('SYSTEM_LOCKOUT_ENFORCED');
-          setCountdown(LOCKOUT_MS / 1000);
-        } else { 
-          setErr(data.error === 'INVALID_CREDENTIALS' ? `DENIED: ${MAX_ATTEMPTS - attempts} LEFT` : `ERR: ${data.error}`); 
-        }
-        setPw('');
+        setErr('OAUTH_FAILED');
       }
     } catch (e) {
       setErr('CONNECTION_FAILURE');
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -146,41 +161,29 @@ function PasswordGate({ onAuth }: { onAuth: () => void }) {
       <div className="relative flex flex-col gap-10 w-full max-w-md bg-white border border-slate-200 p-12 shadow-[0_20px_50px_rgba(0,0,0,0.1)] rounded-2xl">
         <div className="flex flex-col gap-2">
           <h1 className="text-[24px] text-slate-900 font-bold tracking-tight">Core OS Admin</h1>
-          <p className="text-[14px] text-slate-500">Please authenticate to continue.</p>
+          <p className="text-[14px] text-slate-500">Authenticate via GitHub to continue.</p>
         </div>
         
-        <form onSubmit={submit} className="flex flex-col gap-8">
-          <Field label="Access Password">
-            <input 
-              type="password" 
-              value={pw} 
-              onChange={e => setPw(e.target.value)} 
-              className={inputClass} 
-              placeholder="Enter password..." 
-              autoFocus 
-              disabled={countdown > 0 || loading} 
-            />
-          </Field>
-          
+        <div className="flex flex-col gap-6">
           <div className="min-h-[20px]">
-            {countdown > 0 ? (
-              <p className="text-[13px] text-red-600 font-bold">Locked: {mins}:{secs} remaining</p>
-            ) : err ? (
+            {err ? (
               <p className="text-[13px] text-red-600 font-bold">⚠️ {err}</p>
-            ) : null}
+            ) : (
+              <p className="text-[13px] text-slate-500">You'll be redirected to GitHub for authentication.</p>
+            )}
           </div>
 
           <button 
-            type="submit" 
-            disabled={countdown > 0 || loading} 
-            className="w-full text-[14px] font-bold py-4 bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 rounded-xl active:scale-[0.98] disabled:opacity-50"
+            onClick={startOAuth}
+            disabled={loading}
+            className="w-full text-[14px] font-bold py-4 bg-slate-900 text-white hover:bg-slate-800 transition-all shadow-lg shadow-slate-200 rounded-xl active:scale-[0.98] disabled:opacity-50"
           >
-            {loading ? 'Authenticating...' : 'Sign In →'}
+            {loading ? 'Redirecting...' : 'Sign in with GitHub →'}
           </button>
-        </form>
+        </div>
 
         <div className="flex justify-center items-center opacity-40 pt-4 border-t border-slate-100">
-          <span className="text-[11px] text-slate-500 font-medium">Encrypted V5 Environment</span>
+          <span className="text-[11px] text-slate-500 font-medium">OAuth V2 Protected</span>
         </div>
       </div>
     </div>
