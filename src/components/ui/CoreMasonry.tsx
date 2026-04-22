@@ -28,32 +28,34 @@ export default function CoreMasonry({ items }: CoreMasonryProps) {
 
   return (
     <div className="w-full min-h-screen p-4 md:p-6 lg:p-10 flex flex-col items-center">
-      <div className="max-w-[1700px] w-full grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-6 md:gap-8 min-h-full items-stretch">
+      <div className="max-w-[1700px] w-full grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-6 md:gap-8 min-h-full items-start">
         
-        {/* SIDEBAR: Identidad y Logs repartidos verticalmente */}
-        <div className="flex flex-col gap-6 h-full min-h-0">
+        {/* SIDEBAR: Identidad SIEMPRE arriba, Logs abajo */}
+        <div className="flex flex-col gap-6 h-full lg:sticky lg:top-10 max-h-[calc(100vh-80px)]">
+          {/* Identidad: Prioridad Máxima */}
           <motion.div layoutId="identity" layout className="shrink-0">
             {findItem('identity')}
           </motion.div>
           
+          {/* Logs: Solo usa el espacio sobrante */}
           <motion.div 
             layoutId="logs" 
             layout 
-            className="flex-1 min-h-[400px] hidden lg:flex flex-col border border-white/5 bg-carbono-surface/50 backdrop-blur-sm overflow-hidden"
+            className="flex-1 min-h-[250px] hidden lg:flex flex-col border border-white/5 bg-carbono-surface/50 backdrop-blur-sm overflow-hidden"
           >
             <div className="flex-1 p-5 flex flex-col h-full overflow-hidden">
               <SectionHeader title="// SYSTEM_LOGS" />
-              <div className="flex-1 overflow-hidden min-h-0">
+              <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0">
                 {findItem('logs')}
               </div>
             </div>
           </motion.div>
         </div>
 
-        {/* MAIN: Distribución Adaptativa Vertical */}
-        <div className="grid grid-cols-1 md:grid-cols-2 grid-rows-none lg:grid-rows-[auto_1fr] gap-6 md:gap-8 h-full min-h-0">
+        {/* MAIN: Grilla de Proyectos y Roadmap */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-rows-[auto_1fr] gap-6 md:gap-8 h-full min-h-0">
 
-          {/* SECCIÓN PROYECTOS (Arriba) */}
+          {/* SECCIÓN PROYECTOS */}
           <motion.div layoutId="projects" layout className="@container md:col-span-2">
             <section className="border border-white/5 bg-carbono-surface/50 backdrop-blur-sm p-6 md:p-8 overflow-hidden relative shadow-2xl shadow-black/40 h-full">
               <SectionHeader title="// DEPLOYED_MODULES" />
@@ -63,7 +65,7 @@ export default function CoreMasonry({ items }: CoreMasonryProps) {
             </section>
           </motion.div>
 
-          {/* SECCIONES TECH Y ROADMAP (Abajo, ocupando espacio restante) */}
+          {/* SECCIONES TECH Y ROADMAP */}
           <motion.div layoutId="tech" layout className="@container flex flex-col">
             <section className="flex-1 border border-white/5 bg-carbono-surface/50 backdrop-blur-sm p-5 md:p-8 overflow-hidden shadow-xl shadow-black/20">
               <SectionHeader title="// TECH_STACK_CORE" />
