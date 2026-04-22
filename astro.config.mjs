@@ -9,7 +9,7 @@ import vercel from '@astrojs/vercel';
 export default defineConfig({
   output: 'server',
   adapter: vercel(),
-  site: 'https://alejandro-mp.dev',
+  site: 'https://www.alejandro-m-p.com',
   integrations: [
     react(),
     sitemap({
