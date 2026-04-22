@@ -82,8 +82,8 @@ export default function IdentitySection({ name, handle, bio, quote, status, avai
     >
       <div className="flex flex-col h-full bg-transparent">
         
-        {/* CABEZAL COMPACTO: FOTO CENTRADA CON TEXTO SUPERPUESTO */}
-        <div className="relative w-full h-56 sm:h-64 overflow-hidden transition-all duration-700 ease-in-out border-b border-white/10 bg-carbono-mid">
+        {/* CABEZAL: FOTO CENTRADA CON TEXTO SUPERPUESTO RESALTADO (ADAPTABLE) */}
+        <div className="relative w-full h-48 sm:h-64 lg:h-80 overflow-hidden transition-all duration-700 ease-in-out border-b border-white/10 bg-carbono-mid">
           {!imgError ? (
             <img
               src="/profile.jpg"

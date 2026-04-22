@@ -1,0 +1,113 @@
+// (Contenido previo de AdminPanel.tsx hasta PasswordGate incluido...)
+
+/* (Pegar aquí toda la lógica de Tabs que ya existe en el archivo...) */
+
+/* ─── Main Admin Panel Console (Responsive Version) ─── */
+
+export default function AdminPanel() {
+  const [auth, setAuth] = useState(false);
+  const [tab, setTab] = useState<any>('projects');
+  const [ready, setReady] = useState(false);
+  const [logs, setLogs] = useState<string[]>(['CORE_SYSTEM_ONLINE', 'AWAITING_OPERATOR_INPUT']);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const addLog = useCallback((msg: string) => { setLogs(prev => [`${new Date().toLocaleTimeString()} \u2014 ${msg}`, ...prev].slice(0, 50)); }, []);
+
+  useEffect(() => {
+    if (isSessionValid()) {
+      setAuth(true);
+      fetch('/api/github', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'getCache' }) })
+      .then(res => res.json())
+      .then(data => {
+        const serverCache = data.data || {};
+        const local = localStorage.getItem('portfolioProjects');
+        if (local) {
+          const projects = JSON.parse(local) as Project[];
+          const cachedSlugs = Object.keys(serverCache);
+          const localSlugs = projects.map(p => p.specs?.repoSlug).filter(Boolean) as string[];
+          const pending = localSlugs.filter(s => !cachedSlugs.includes(s));
+          if (pending.length > 0) addLog(`[WARN] LOCAL_BUFFER_OUT_OF_SYNC: ${pending.length} pending projects.`);
+          else addLog('UPLINK_STATUS: SYNCHRONIZED');
+        }
+      })
+      .catch(() => addLog('WARN: SYNC_ENGINE_OFFLINE'));
+    }
+    setReady(true);
+  }, [addLog]);
+  
+  useEffect(() => {
+    const handleKeys = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); addLog('MANUAL_SYNC_TRIGGERED'); } };
+    window.addEventListener('keydown', handleKeys); return () => window.removeEventListener('keydown', handleKeys);
+  }, [addLog]);
+
+  if (!ready) return null;
+  if (!auth) return <PasswordGate onAuth={() => setAuth(true)} />;
+
+  const menuItems = [
+    { id: 'projects', label: 'PROJECT_MODULES', icon: '◈' },
+    { id: 'tech', label: 'TECH_REGISTRY', icon: '◰' },
+    { id: 'ambitions', label: 'ROADMAP_MAPPER', icon: '▲' },
+    { id: 'settings', label: 'SYSTEM_CONFIG', icon: '⚙' },
+    { id: 'publish', label: 'PUBLISH_BRIDGE', icon: '↑' },
+  ];
+
+  return (
+    <div className="h-screen bg-[#0f1117] flex flex-col lg:flex-row overflow-hidden font-mono text-white select-none relative">
+      
+      {/* MOBILE HEADER */}
+      <header className="lg:hidden h-16 bg-[#0a0c12] border-b border-white/10 px-6 flex items-center justify-between shrink-0 z-30">
+        <p className="text-[14px] font-bold tracking-[0.2em] uppercase leading-none">Core_OS <span className="text-cobalt">Admin</span></p>
+        <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="w-10 h-10 flex items-center justify-center bg-white/5 rounded-lg border border-white/10 active:bg-white/10">
+          {mobileMenuOpen ? '✕' : '☰'}
+        </button>
+      </header>
+
+      {/* SIDEBAR NAVIGATION (DRAWER ON MOBILE) */}
+      <aside className={`
+        fixed lg:relative inset-y-0 left-0 w-72 border-r border-white/5 flex flex-col shrink-0 bg-[#0a0c12] z-40 transition-transform duration-300
+        ${mobileMenuOpen ? 'translate-x-0 shadow-2xl shadow-black' : '-translate-x-full lg:translate-x-0'}
+      `}>
+        <div className="hidden lg:flex p-12 border-b border-white/5 flex-col gap-2">
+          <p className="text-[15px] text-white tracking-[0.4em] font-bold uppercase leading-none">Core_OS</p>
+          <div className="flex items-center gap-2"><span className="w-1.5 h-1.5 bg-cobalt animate-pulse rounded-full" /><p className="text-[9px] text-cobalt tracking-widest uppercase font-bold">Admin_Active</p></div>
+        </div>
+        <nav className="flex-1 p-6 flex flex-col gap-1 overflow-y-auto custom-scrollbar">
+          {menuItems.map(t => (
+            <button key={t.id} onClick={() => { setTab(t.id); addLog(`NAV_TO: ${t.id.toUpperCase()}`); setMobileMenuOpen(false); }} className={`text-left px-8 py-5 text-[11px] tracking-[0.3em] uppercase transition-all duration-200 border-l-2 ${tab === t.id ? 'bg-cobalt/5 text-cobalt border-l-cobalt' : 'border-l-transparent text-text-faint hover:text-white hover:bg-white/2'}`}>
+              <span className="mr-6 opacity-30">{t.icon}</span> {t.label}
+            </button>
+          ))}
+        </nav>
+        <div className="p-10 border-t border-white/5 flex flex-col gap-4">
+           <a href="/" className="text-center py-3 text-[10px] text-white/40 hover:text-white border border-white/5 rounded uppercase tracking-widest transition-all">View Portfolio</a>
+           <button onClick={() => { sessionStorage.removeItem(SESSION_KEY); window.location.reload(); }} className="text-[10px] text-err/40 hover:text-err tracking-widest uppercase transition-all">✕ TERMINATE_SESSION</button>
+        </div>
+      </aside>
+
+      {/* MAIN CONTENT AREA */}
+      <main className="flex-1 flex flex-col min-w-0 bg-[#0f1117] shadow-[inset_0_0_150px_rgba(0,0,0,0.4)] relative">
+        <div className="flex-1 overflow-y-auto px-6 sm:px-20 py-8 sm:py-16 custom-scrollbar island-load relative z-10">
+          <div className="max-w-5xl mx-auto">
+            {tab === 'projects'   && <ProjectsTab onLog={addLog} />}
+            {tab === 'tech'       && <TechTab onLog={addLog} />}
+            {tab === 'ambitions'  && <AmbitionsTab onLog={addLog} />}
+            {tab === 'settings'   && <SettingsTab onLog={addLog} />}
+            {tab === 'publish'    && <PublishTab onLog={addLog} />}
+          </div>
+        </div>
+      </main>
+
+      {/* SESSION HISTORY (DESKTOP ONLY) */}
+      <aside className="hidden xl:flex w-80 border-l border-white/5 bg-[#0a0c12] flex flex-col shrink-0">
+        <div className="p-10 border-b border-white/5 bg-[#0f1117]"><p className="text-[10px] text-text-faint tracking-widest font-bold uppercase leading-none">// SESSION_HISTORY</p></div>
+        <div className="flex-1 p-8 flex flex-col gap-1 overflow-y-auto text-[10px] opacity-40 hover:opacity-100 transition-opacity">
+          {logs.map((l, i) => <p key={i} className={`py-1 border-b border-white/2 ${i === 0 ? 'text-cobalt font-bold' : 'text-text-faint'}`}> {'>'} {l}</p>)}
+        </div>
+        <div className="p-10 bg-[#0f1117] border-t border-white/5 flex flex-col gap-6">
+          <div className="flex flex-col gap-1"><span className="text-[9px] text-text-faint uppercase tracking-widest font-bold opacity-30 italic">operator:</span><p className="text-[11px] text-white tracking-widest font-bold uppercase">admin@gest_core</p></div>
+          <div className="flex flex-col gap-1"><span className="text-[9px] text-text-faint uppercase tracking-widest font-bold opacity-30 italic">status:</span><p className="text-[11px] text-green-500/80 tracking-widest font-bold uppercase">ENCRYPTED_SESSION</p></div>
+        </div>
+      </aside>
+    </div>
+  );
+}

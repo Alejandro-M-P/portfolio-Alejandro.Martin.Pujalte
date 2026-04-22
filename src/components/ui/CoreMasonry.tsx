@@ -1,6 +1,5 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { prepare, layout } from '@chenglou/pretext';
 
 interface MasonryItem {
   id: string;
@@ -9,116 +8,131 @@ interface MasonryItem {
 
 interface CoreMasonryProps {
   items: MasonryItem[];
-  identityData?: any;
-  logs?: any[];
 }
 
-export default function CoreMasonry(props: CoreMasonryProps) {
-  const { items, identityData, logs = [] } = props;
-  const findItem = (id: string) => items.find(i => i.id === id)?.component;
-  
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
-
-  const sidebarWeight = useMemo(() => {
-    if (!mounted || !identityData?.bio) return 1.5;
-    try {
-      const preparedBio = prepare(identityData.bio, "14px Inter");
-      const bioSize = layout(preparedBio, 400, 20);
-      return bioSize.height > 100 ? 1.8 : 1.6;
-    } catch (e) {
-      return 1.6;
-    }
-  }, [mounted, identityData?.bio]);
-
-  const SectionHeader = ({ title, color = 'bg-cobalt' }: { title: string; color?: string }) => (
-    <div className="flex flex-col mb-3 md:mb-4 w-full shrink-0">
-      <div className="flex items-center justify-between pb-2">
-        <span className="text-[10px] md:text-[12px] font-black text-white/50 tracking-[0.25em] uppercase">{title}</span>
+function SectionHeader({ title }: { title: string }) {
+  return (
+    <div className="flex flex-col gap-1.5 mb-6">
+      <div className="flex items-center gap-3">
+        <div className="w-1 h-3 bg-cobalt" />
+        <h2 className="text-[11px] text-white/60 font-black tracking-[0.4em] uppercase">{title}</h2>
       </div>
-      <div className={`h-0.5 w-full ${color} opacity-40 shadow-[0_0_10px_rgba(0,85,255,0.2)]`} />
+      <div className="h-px bg-white/5 w-full" />
     </div>
   );
+}
+
+export default function CoreMasonry({ items }: CoreMasonryProps) {
+  const [showMobileLogs, setShowMobileLogs] = useState(false);
+
+  const findItem = (id: string) => items.find(i => i.id === id)?.component;
 
   return (
-    <div className="w-full h-screen max-h-screen flex flex-col items-center bg-black overflow-hidden font-sans select-none">
-      <div className="max-w-[2200px] w-full h-full p-4 md:p-6 lg:p-10 flex flex-col lg:flex-row gap-6 md:gap-8 min-h-0">
+    <div className="w-full min-h-screen bg-black font-sans select-none relative overflow-x-hidden text-white">
+      
+      {/* BOTÓN FLOTANTE TERMINAL (Solo Móvil) */}
+      <button 
+        onClick={() => setShowMobileLogs(!showMobileLogs)}
+        className="lg:hidden fixed bottom-6 right-6 z-50 w-14 h-14 bg-cobalt text-white rounded-full shadow-[0_0_30px_rgba(0,85,255,0.4)] flex items-center justify-center border border-white/20 active:scale-90 transition-all"
+      >
+        <span className="text-xl">{showMobileLogs ? '✕' : '📟'}</span>
+      </button>
+
+      {/* DRAWER DE LOGS (Solo Móvil) */}
+      <div className={`
+        lg:hidden fixed inset-x-0 bottom-0 z-40 bg-black/95 border-t border-white/10 transition-transform duration-500 ease-out p-6 pt-10
+        ${showMobileLogs ? 'translate-y-0' : 'translate-y-full'}
+        h-[70vh] flex flex-col backdrop-blur-xl
+      `}>
+        <div className="flex items-center justify-between mb-6 border-b border-white/5 pb-3">
+          <span className="text-[10px] text-cobalt font-black tracking-[0.4em] uppercase tracking-widest text-center flex-1">System_Live_Telemetry</span>
+        </div>
+        <div className="flex-1 overflow-y-auto custom-scrollbar font-mono text-[11px] opacity-60 text-blue-100/80 leading-relaxed">
+          {findItem('logs')}
+        </div>
+      </div>
+
+      {/* UNIFIED RESPONSIVE GRID - DARK INDUSTRIAL */}
+      <div className="max-w-[2400px] mx-auto p-4 sm:p-6 lg:p-10 lg:h-screen lg:max-h-screen flex flex-col lg:flex-row gap-6 md:gap-8 min-h-0">
         
-        {/* SIDEBAR: IDENTIDAD (Dominante) / TERMINAL (Mínima) */}
-        <div 
-          className="flex flex-col gap-6 w-full lg:w-[clamp(320px,22vw,440px)] h-full shrink-0 min-h-0"
-        >
-          {/* IDENTIDAD: Maximizada y limpia */}
+        {/* COLUMNA 1: IDENTIDAD */}
+        <div className="w-full lg:w-[clamp(320px,22vw,440px)] flex flex-col gap-6 shrink-0 lg:h-full">
           <motion.div 
-            layoutId="identity" 
-            layout 
-            className="flex-[4] min-h-0 bg-transparent overflow-hidden"
+            layoutId="identity"
+            className="w-full bg-transparent lg:h-full overflow-hidden island-load border border-white/5"
           >
-             <div className="h-full overflow-y-auto custom-scrollbar">
-                {findItem('identity')}
-             </div>
+            <div className="lg:h-full lg:overflow-y-auto custom-scrollbar">
+              {findItem('identity')}
+            </div>
           </motion.div>
-          
-          {/* LOGS: Mínima expresión en la base */}
+
+          {/* LOGS EN DESKTOP */}
           <motion.div 
-            layoutId="logs" 
-            layout 
-            className="flex-1 hidden lg:flex flex-col border border-white/5 bg-black/40 overflow-hidden max-h-[180px]"
+            layoutId="logs-desktop"
+            className="hidden lg:flex flex-col border border-white/5 bg-carbono-surface/10 overflow-hidden h-48 shrink-0"
           >
             <div className="flex-1 p-4 flex flex-col h-full overflow-hidden">
               <div className="flex items-center justify-between mb-3 border-b border-white/5 pb-2">
                 <span className="text-[9px] text-white/20 font-bold tracking-[0.3em] uppercase">System_Output</span>
               </div>
-              <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0 text-[10px] opacity-40 font-mono">
+              <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0 text-[10px] opacity-30 font-mono">
                 {findItem('logs')}
               </div>
             </div>
           </motion.div>
         </div>
 
-        {/* CUERPO PRINCIPAL: PROYECTOS + TECH/ROADMAP */}
-        <div className="flex-[4] flex flex-col gap-6 md:gap-8 h-full min-w-0">
+        {/* COLUMNA 2: PROYECTOS Y DATA */}
+        <div className="flex-1 flex flex-col gap-6 md:gap-8 lg:h-full min-w-0 min-h-0">
           
-          {/* PROJECTS: Bloque superior dominante */}
-          <motion.div layoutId="projects" layout className="flex-[2.5] min-h-0">
-            <section className="h-full border border-white/5 bg-carbono-surface/20 backdrop-blur-md p-6 md:p-8 overflow-hidden relative shadow-2xl flex flex-col">
-              <SectionHeader title="// DEPLOYED_MODULES" />
-              <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0 mt-4">
-                {findItem('projects')}
-              </div>
-            </section>
+          {/* PROJECTS GRID */}
+          <motion.div 
+            layoutId="projects"
+            className="flex-1 lg:min-h-0 bg-carbono-surface/5 border border-white/5 p-6 sm:p-10 flex flex-col island-load"
+          >
+            <SectionHeader title="// DEPLOYED_MODULES" />
+            <div className="flex-1 lg:overflow-y-auto custom-scrollbar min-h-[400px] lg:min-h-0">
+              {findItem('projects')}
+            </div>
           </motion.div>
 
-          {/* TECH + ROADMAP: Bloque inferior repartido */}
-          <div className="flex-1 hidden min-h-[400px]:flex flex-col md:flex-row gap-6 md:gap-8 min-h-0">
+          {/* TECH & ROADMAP */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 lg:h-80 shrink-0">
             
-            <motion.div layoutId="tech" layout className="flex-1 min-h-0">
-              <section className="h-full border border-white/5 bg-carbono-surface/20 backdrop-blur-md p-6 lg:p-8 overflow-hidden flex flex-col shadow-xl">
-                <SectionHeader title="// TECH_ENVIRONMENT" />
-                <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0">
-                  {findItem('tech')}
-                </div>
-              </section>
+            <motion.div 
+              layoutId="tech"
+              className="bg-carbono-surface/5 border border-white/5 p-6 sm:p-8 flex flex-col h-full"
+            >
+              <SectionHeader title="// TECH_ENVIRONMENT" />
+              <div className="flex-1 lg:overflow-y-auto custom-scrollbar min-h-[250px] lg:min-h-0">
+                {findItem('tech')}
+              </div>
             </motion.div>
 
-            <motion.div layoutId="roadmap" layout className="flex-1 min-h-0">
-              <section className="h-full border border-white/5 bg-carbono-surface/20 backdrop-blur-md p-6 lg:p-8 overflow-hidden flex flex-col shadow-xl">
-                <SectionHeader title="// STRATEGIC_ROADMAP" />
-                <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0">
-                  {findItem('roadmap')}
-                </div>
-              </section>
+            <motion.div 
+              layoutId="roadmap"
+              className="bg-carbono-surface/5 border border-white/5 p-6 sm:p-8 flex flex-col h-full"
+            >
+              <SectionHeader title="// STRATEGIC_ROADMAP" />
+              <div className="flex-1 lg:overflow-y-auto custom-scrollbar min-h-[250px] lg:min-h-0">
+                {findItem('roadmap')}
+              </div>
             </motion.div>
 
           </div>
         </div>
       </div>
 
-      <style jsx global>{`
+      <style dangerouslySetInnerHTML={{ __html: `
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }
-      `}</style>
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.05); border-radius: 10px; }
+        .island-load { animation: island-in 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        @keyframes island-in {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}} />
     </div>
   );
 }
