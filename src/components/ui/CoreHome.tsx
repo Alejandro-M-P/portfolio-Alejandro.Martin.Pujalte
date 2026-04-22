@@ -17,15 +17,8 @@ interface CoreHomeProps {
   settings: any;
 }
 
-export default function CoreHome({ 
-  identityData, 
-  projects, 
-  techStack, 
-  ambitions, 
-  logs, 
-  logLimit,
-  settings,
-}: CoreHomeProps) {
+export default function CoreHome(props: CoreHomeProps) {
+  const { identityData, projects, techStack, ambitions, logs, logLimit, settings } = props;
   
   const masonryItems = [
     { id: 'identity', component: <IdentitySection {...identityData} /> },
@@ -47,5 +40,5 @@ export default function CoreHome({
     { id: 'roadmap', component: <Roadmap ambitions={ambitions} /> }
   ];
 
-  return <CoreMasonry items={masonryItems} />;
+  return <CoreMasonry {...props} items={masonryItems} />;
 }
