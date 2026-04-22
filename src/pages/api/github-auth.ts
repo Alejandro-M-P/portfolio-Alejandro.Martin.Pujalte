@@ -4,15 +4,17 @@ export const prerender = false;
 
 const CLIENT_ID = import.meta.env.GITHUB_OAUTH_CLIENT_ID;
 const CLIENT_SECRET = import.meta.env.GITHUB_OAUTH_CLIENT_SECRET;
-const REDIRECT_URI = import.meta.env.GITHUB_OAUTH_REDIRECT_URI || 'https://portfolio-alejandro-martin-pujalte.vercel.app/api/github-auth';
 
 export const GET: APIRoute = async ({ url }) => {
   if (!CLIENT_ID || !CLIENT_SECRET) {
     return new Response(JSON.stringify({ error: 'OAuth not configured' }), { status: 500 });
   }
 
+  const host = url.origin;
+  const redirectUri = `${host}/api/github-auth`;
+  
   const state = Math.random().toString(36).substring(2, 15);
-  const githubAuthUrl = `https://github.com/login/oauth/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=read:user&state=${state}`;
+  const githubAuthUrl = `https://github.com/login/oauth/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=read:user&state=${state}`;
   
   return new Response(null, {
     status: 302,
