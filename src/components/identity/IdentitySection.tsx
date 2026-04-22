@@ -78,65 +78,65 @@ export default function IdentitySection({ name, handle, bio, quote, status, avai
   return (
     <section 
       data-section="identity" 
-      className={`industrial-panel flex flex-col relative z-10 island-load overflow-hidden shadow-2xl transition-all duration-500 ${isGlowing ? 'ring-2 ring-cobalt shadow-[0_0_25px_rgba(0,85,255,0.4)]' : ''}`}
+      className={`flex flex-col relative z-10 island-load transition-all duration-500 ${isGlowing ? 'ring-1 ring-cobalt/40 shadow-[0_0_20px_rgba(0,85,255,0.2)]' : ''}`}
     >
-      <div className="flex flex-col @container h-full">
-        {/* Header Adaptativo: Más grande y vertical en 2K, horizontal compacto en 1080p */}
-        <div className="relative w-full bg-carbono-mid flex flex-row min-h-[450px]:lg:flex-col min-h-[450px]:lg:h-auto h-24 sm:h-28 border-b border-white/5 transition-all duration-500 ease-in-out">
-          <div className="relative w-24 sm:w-28 min-h-[450px]:lg:w-full min-h-[450px]:lg:h-[320px] h-full shrink-0 overflow-hidden">
-            {!imgError ? (
-              <img
-                src="/profile.jpg"
-                alt={name}
-                className="w-full h-full object-cover object-top lg:object-center transition-transform duration-700 hover:scale-105"
-                onError={() => setImgError(true)}
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-[13px] text-text-faint tracking-widest uppercase">NO_SIGNAL</div>
-            )}
-            {/* Gradiente solo visible en modo vertical (pantallas grandes) */}
-            <div className="absolute inset-0 bg-linear-to-t from-black/80 via-transparent to-transparent hidden min-h-[450px]:lg:block" />
-          </div>
+      <div className="flex flex-col h-full bg-transparent">
+        
+        {/* CABEZAL COMPACTO: FOTO CENTRADA CON TEXTO SUPERPUESTO */}
+        <div className="relative w-full h-56 sm:h-64 overflow-hidden transition-all duration-700 ease-in-out border-b border-white/10 bg-carbono-mid">
+          {!imgError ? (
+            <img
+              src="/profile.jpg"
+              alt={name}
+              className="w-full h-full object-cover object-center transition-transform duration-1000 hover:scale-110"
+              onError={() => setImgError(true)}
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-[11px] text-text-faint tracking-widest uppercase">NO_SIGNAL</div>
+          )}
           
-          {/* Nombre y status: Posicionamiento dinámico */}
-          <div className="p-3 sm:p-4 flex-1 flex flex-col justify-center min-h-[450px]:lg:absolute min-h-[450px]:lg:bottom-0 min-h-[450px]:lg:left-0 min-h-[450px]:lg:w-full min-h-[450px]:lg:p-6 lg:bg-linear-to-t lg:from-black/90 lg:to-transparent">
-            <Pill variant="cobalt" className="text-[9px] sm:text-[10px] mb-1 sm:mb-2 w-fit shadow-lg shadow-cobalt/20">{status}</Pill>
-            <div className="flex flex-col gap-0.5">
-              <h1 className="text-[13px] sm:text-[14px] min-h-[450px]:lg:text-[20px] font-bold tracking-tight text-white leading-tight drop-shadow-xl">
-                {name.replace('\n', ' ')}
-                {birthDate && calculateAge(birthDate) !== null && (
-                  <span className="text-[11px] sm:text-[12px] font-normal text-white/60 ml-2 opacity-80">({calculateAge(birthDate)})</span>
-                )}
-              </h1>
-              <span className="text-[9px] sm:text-[10px] min-h-[450px]:lg:text-[11px] text-white/40 tracking-[0.2em] uppercase drop-shadow-sm font-black">
+          <div className="absolute inset-0 bg-linear-to-t from-black via-black/20 to-transparent pointer-events-none" />
+          
+          <div className="absolute bottom-0 left-0 w-full p-6 flex flex-col">
+            <div className="flex items-center justify-between mb-2">
+              <Pill variant="cobalt" className="text-[9px] font-black shadow-[0_0_15px_rgba(0,85,255,0.4)] bg-cobalt text-white">{status}</Pill>
+            </div>
+            
+            <h1 className="text-[24px] sm:text-[28px] font-black tracking-tighter text-white leading-none drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)]">
+              {name.replace('\n', ' ')}
+            </h1>
+            <div className="flex items-center gap-3 mt-1">
+              <span className="text-[10px] text-cobalt tracking-[0.3em] uppercase font-black">
                 {handle}
               </span>
+              {birthDate && calculateAge(birthDate) !== null && (
+                <div className="flex items-center gap-1 bg-white/10 backdrop-blur-md px-1.5 py-0.5 rounded-sm">
+                   <span className="text-[10px] font-black text-white tracking-widest">{calculateAge(birthDate)}y</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Bio y Acciones */}
-        <div className="p-4 flex flex-col gap-4">
-          <p className="text-[13px] text-text-muted leading-relaxed font-medium">{bio}</p>
+        {/* BIO Y ACCIONES COMPACTAS */}
+        <div className="p-6 flex flex-col gap-5">
+          <p className="text-[13px] text-text-muted leading-relaxed font-medium italic opacity-80 pl-3 border-l border-cobalt/30">
+            {bio}
+          </p>
 
-          <div className="space-y-3">
+          <div className="space-y-4">
             <AvailabilityBar value={availabilityValue} />
             
             <div className="flex flex-col gap-2">
               <ContactButton href={contactEmail ? `mailto:${contactEmail}` : undefined} />
 
               {cvUrl && (
-                <>
-                  <button
-                    onClick={() => forceDownload(cvUrl, 'Alejandro-CV.pdf')}
-                    className="block w-full bg-cobalt text-white text-center text-[11px] font-bold tracking-widest uppercase px-4 py-2.5 hover:bg-cobalt/80 transition-all duration-150 active:scale-[0.98] shadow-lg shadow-cobalt/20 cursor-pointer"
-                  >
-                    ↓ DOWNLOAD_CV
-                  </button>
-                  <p className="text-[10px] text-text-faint tracking-widest text-center opacity-50">
-                    // work history & experience → CV
-                  </p>
-                </>
+                <button
+                  onClick={() => forceDownload(cvUrl, 'Alejandro-CV.pdf')}
+                  className="w-full bg-cobalt text-white text-[10px] font-black tracking-[0.2em] uppercase px-4 py-3 hover:bg-blue-500 transition-all duration-150 active:scale-[0.98] shadow-lg border border-white/10"
+                >
+                  ↓ DOWNLOAD CV (EN)
+                </button>
               )}
 
               {linkedinUrl && (
@@ -144,9 +144,9 @@ export default function IdentitySection({ name, handle, bio, quote, status, avai
                   href={linkedinUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="block w-full border border-white/40 text-white text-center text-[11px] font-bold tracking-widest uppercase px-4 py-2.5 hover:bg-white hover:text-black transition-all duration-150 active:scale-[0.98]"
+                  className="w-full bg-white/5 border border-white/10 text-white/70 text-center text-[10px] font-black tracking-[0.2em] uppercase px-4 py-3 hover:bg-[#0077B5] hover:text-white transition-all duration-150 active:scale-[0.98]"
                 >
-                  LINKEDIN // CONNECT →
+                  LINKEDIN
                 </a>
               )}
 
@@ -156,7 +156,7 @@ export default function IdentitySection({ name, handle, bio, quote, status, avai
                   href={link.href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="block w-full border border-white/20 text-white/70 text-center text-[11px] font-bold tracking-widest uppercase px-4 py-2.5 hover:bg-white hover:text-black transition-all duration-150 active:scale-[0.98]"
+                  className="w-full border border-white/10 bg-white/[0.02] text-white/40 text-center text-[10px] font-black tracking-[0.2em] uppercase px-4 py-3 hover:bg-white/10 hover:text-white transition-all duration-150 active:scale-[0.98]"
                 >
                   {link.label}
                 </a>

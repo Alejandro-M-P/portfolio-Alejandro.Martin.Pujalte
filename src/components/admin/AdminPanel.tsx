@@ -1,4 +1,4 @@
-// ADMIN_PANEL_V5_ULTRA_LIGHT_SAAS
+// ADMIN_PANEL_V5_ULTRA_LIGHT_SAAS_V2_RESPONSIVE
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { Project, TechTool, Ambition, Experience, SiteSettings, BuildEntry } from '../../types';
 import { logActivity } from '../../lib/activityLog';
