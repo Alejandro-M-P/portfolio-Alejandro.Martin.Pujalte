@@ -1,16 +1,11 @@
-// AdminPanel.tsx - INDUSTRIAL LIGHT CARBON EDITION (FIXED TYPES)
+// AdminPanel.tsx - INDUSTRIAL RESPONSIVE EDITION (GITHUB AUTH)
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { Project, TechTool, Ambition, SiteSettings, BuildEntry, LogEntry } from '../../types';
 import { logActivity } from '../../lib/activityLog';
 
-const ADMIN_PASSWORD = import.meta.env.PUBLIC_ADMIN_PASSWORD;
 const SESSION_KEY   = 'admin_session';
 const SESSION_TS    = 'admin_session_ts';
-const ATTEMPTS_KEY  = 'admin_attempts';
-const LOCKOUT_KEY   = 'admin_lockout';
-const MAX_ATTEMPTS  = 3;
-const LOCKOUT_MS    = 5 * 60 * 1000;
-const SESSION_TTL   = 30 * 60 * 1000;
+const SESSION_TTL   = 60 * 60 * 1000; // 1 hour
 
 interface GitHubDetails {
   id: string;
@@ -29,11 +24,6 @@ interface GitHubDetails {
 
 /* --- Utilities --- */
 
-async function sha256(text: string): Promise<string> {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
 function isSessionValid(): boolean {
   if (typeof window === 'undefined') return false;
   if (sessionStorage.getItem(SESSION_KEY) !== 'true') return false;
@@ -47,12 +37,12 @@ function isSessionValid(): boolean {
 
 /* --- Styled Components --- */
 
-const inputClass = "bg-transparent border-b border-white/10 px-0 py-2 text-[13px] text-white font-mono w-full focus:outline-none focus:border-cobalt transition-colors duration-100 placeholder:opacity-20";
+const inputClass = "bg-white/5 border border-white/10 px-4 py-2 text-[13px] text-white font-mono w-full focus:outline-none focus:border-cobalt/40 transition-colors duration-100 placeholder:opacity-20 rounded";
 
 function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-1">
-      <label className="text-[9px] text-white/40 tracking-[0.2em] uppercase font-black">/ {label}{required && <span className="text-cobalt ml-1">*</span>}</label>
+    <div className="flex flex-col gap-1.5">
+      <label className="text-[10px] text-white/40 tracking-[0.2em] uppercase font-black">/ {label}{required && <span className="text-cobalt ml-1">*</span>}</label>
       {children}
     </div>
   );
@@ -61,7 +51,9 @@ function Field({ label, required, children }: { label: string; required?: boolea
 function CheckField({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
   return (
     <label className="flex items-center gap-3 cursor-pointer select-none group">
-      <div className={`w-3 h-3 border ${value ? 'bg-cobalt border-cobalt' : 'border-white/20 group-hover:border-white/40'} transition-colors`} />
+      <div className={`w-4 h-4 border ${value ? 'bg-cobalt border-cobalt shadow-[0_0_10px_rgba(0,85,255,0.3)]' : 'border-white/20 group-hover:border-white/40'} transition-all flex items-center justify-center`}>
+        {value && <span className="text-[10px] text-white">✓</span>}
+      </div>
       <input type="checkbox" checked={value} onChange={e => onChange(e.target.checked)} className="hidden" />
       <span className="text-[10px] text-white/60 tracking-widest uppercase group-hover:text-white transition-colors">{label}</span>
     </label>
@@ -70,71 +62,87 @@ function CheckField({ label, value, onChange }: { label: string; value: boolean;
 
 function SectionHeader({ title }: { title: string }) {
   return (
-    <div className="flex flex-col gap-2 mb-8">
-      <h2 className="text-[14px] text-white font-black tracking-[0.3em] uppercase">{title}</h2>
-      <div className="h-0.5 w-12 bg-cobalt shadow-[0_0_10px_rgba(0,85,255,0.5)]" />
+    <div className="flex flex-col gap-3 mb-8">
+      <h2 className="text-[15px] text-white font-black tracking-[0.3em] uppercase leading-none">{title}</h2>
+      <div className="h-px w-full bg-linear-to-r from-cobalt via-white/10 to-transparent" />
     </div>
   );
 }
 
-/* --- Password Gate --- */
+/* --- GitHub Auth Gate --- */
 
-function PasswordGate({ onAuth }: { onAuth: () => void }) {
-  const [pw, setPw] = useState('');
-  const [err, setErr] = useState('');
+function GitHubAuthGate({ onAuth }: { onAuth: () => void }) {
   const [loading, setLoading] = useState(false);
-  const [countdown, setCountdown] = useState(0);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    const tick = () => {
-      const lockUntil = Number(localStorage.getItem(LOCKOUT_KEY) ?? 0);
-      setCountdown(Math.max(0, Math.ceil((lockUntil - Date.now()) / 1000)));
-    };
-    tick(); const id = setInterval(tick, 1000); return () => clearInterval(id);
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    if (code) {
+      handleCallback(code);
+    }
   }, []);
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault(); if (countdown > 0 || loading) return;
+  async function handleCallback(code: string) {
     setLoading(true);
     try {
-      const hash = await sha256(pw);
-      const pwHash = await sha256(ADMIN_PASSWORD ?? '');
-      if (hash === pwHash) {
-        localStorage.removeItem(ATTEMPTS_KEY); localStorage.removeItem(LOCKOUT_KEY);
-        sessionStorage.setItem(SESSION_KEY, 'true'); sessionStorage.setItem(SESSION_TS, String(Date.now()));
+      const res = await fetch('/api/github-auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code })
+      });
+      const data = await res.json();
+      if (data.success) {
+        sessionStorage.setItem(SESSION_KEY, 'true');
+        sessionStorage.setItem(SESSION_TS, String(Date.now()));
+        window.history.replaceState({}, document.title, "/admin");
         onAuth();
       } else {
-        const attempts = Number(localStorage.getItem(ATTEMPTS_KEY) ?? 0) + 1;
-        localStorage.setItem(ATTEMPTS_KEY, String(attempts));
-        if (attempts >= MAX_ATTEMPTS) {
-          localStorage.setItem(LOCKOUT_KEY, String(Date.now() + LOCKOUT_MS));
-          localStorage.setItem(ATTEMPTS_KEY, '0');
-          setErr('LOCKOUT_ENFORCED');
-        } else { setErr(`DENIED: ${MAX_ATTEMPTS - attempts} LEFT`); }
-        setPw('');
+        setError(data.error || 'Authentication failed');
       }
-    } finally { setLoading(false); }
+    } catch (e) {
+      setError('Connection error');
+    } finally {
+      setLoading(false);
+    }
   }
 
-  const mins = Math.floor(countdown / 60);
-  const secs = String(countdown % 60).padStart(2, '0');
+  function login() {
+    window.location.href = '/api/github-auth';
+  }
 
   return (
-    <div className="min-h-screen bg-[#1a1a1a] flex items-center justify-center font-mono select-none">
-      <div className="flex flex-col gap-10 w-full max-w-sm p-12 border border-white/10 bg-[#222222] shadow-2xl">
-        <div className="flex flex-col gap-2">
-          <p className="text-[10px] text-white font-black tracking-[0.4em] uppercase">ADMIN_OVERRIDE</p>
+    <div className="min-h-screen bg-[#0d0d0d] flex items-center justify-center font-mono select-none p-6">
+      <div className="flex flex-col gap-12 w-full max-w-md p-12 border border-white/10 bg-[#121212] shadow-2xl relative overflow-hidden">
+        {/* Background Decor */}
+        <div className="absolute -top-24 -right-24 w-48 h-48 bg-cobalt/10 blur-[60px] rounded-full" />
+        
+        <div className="relative z-10 flex flex-col gap-4">
+          <p className="text-[12px] text-cobalt font-black tracking-[0.5em] uppercase">SYSTEM_ACCESS // LOGIN</p>
           <div className="h-px bg-white/10 w-full" />
         </div>
-        <form onSubmit={submit} className="flex flex-col gap-8">
-          <input type="password" value={pw} onChange={e => setPw(e.target.value)} className="bg-transparent border-b border-white p-2 text-white focus:outline-none w-full text-center tracking-[0.5em]" placeholder="••••" autoFocus disabled={countdown > 0 || loading} />
-          {countdown > 0 ? (
-            <p className="text-[10px] text-red-400 text-center font-bold tracking-widest uppercase">LOCKOUT: {mins}:{secs}</p>
-          ) : err && (
-            <p className="text-[10px] text-red-400 text-center font-bold tracking-widest uppercase">{err}</p>
-          )}
-          <button type="submit" disabled={countdown > 0 || loading} className="w-full py-4 bg-cobalt text-white text-[10px] font-black uppercase tracking-[0.2em] hover:bg-cobalt-light transition-all">{loading ? '...' : 'AUTHENTICATE'}</button>
-        </form>
+
+        <div className="relative z-10 flex flex-col gap-10">
+          <div className="flex flex-col gap-4 text-center">
+            <p className="text-white/60 text-[11px] leading-relaxed tracking-widest uppercase">
+              Authorization required to access the central core management bridge.
+            </p>
+            {error && <p className="text-err text-[10px] font-black tracking-widest uppercase animate-pulse">!! {error}</p>}
+          </div>
+
+          <button 
+            onClick={login} 
+            disabled={loading} 
+            className="w-full py-5 bg-white/5 border border-white/10 text-white text-[11px] font-black uppercase tracking-[0.3em] hover:bg-cobalt hover:border-cobalt transition-all shadow-lg active:scale-[0.98]"
+          >
+            {loading ? 'SYNCING_UPLINK...' : 'AUTHORIZE_WITH_GITHUB \u2192'}
+          </button>
+        </div>
+
+        <div className="relative z-10 flex justify-between items-center opacity-20">
+          <span className="text-[8px] text-white tracking-widest">v4.2.1 Stable</span>
+          <span className="text-[8px] text-white tracking-widest uppercase">Encrypted Session</span>
+        </div>
       </div>
     </div>
   );
@@ -154,45 +162,48 @@ function RepoImportModal({ onClose, onImport, existingSlugs }: { onClose: () => 
       .finally(() => setLoading(false));
   }, []);
 
-  const filtered = repos.filter(r => 
+  const filtered = Array.isArray(repos) ? repos.filter(r => 
     !existingSlugs.includes(r.fullName) && 
     (r.name.toLowerCase().includes(filter.toLowerCase()) || r.description?.toLowerCase().includes(filter.toLowerCase()))
-  );
+  ) : [];
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm">
-      <div className="w-full max-w-2xl bg-[#222222] border border-white/10 flex flex-col max-h-[80vh] shadow-2xl">
-        <header className="p-8 border-b border-white/5 flex justify-between items-center bg-[#1a1a1a]">
-          <SectionHeader title="Import_GitHub_Repos" />
-          <button onClick={onClose} className="text-white/40 hover:text-white mb-8">✕</button>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black/90 backdrop-blur-md">
+      <div className="w-full max-w-2xl bg-[#1a1a1a] border border-white/10 flex flex-col max-h-[90vh] shadow-2xl rounded-xl">
+        <header className="p-6 sm:p-8 border-b border-white/5 flex justify-between items-center bg-[#121212] rounded-t-xl">
+          <h2 className="text-[14px] text-white font-black tracking-[0.3em] uppercase leading-none">Import_GitHub_Repos</h2>
+          <button onClick={onClose} className="w-10 h-10 flex items-center justify-center text-white/40 hover:text-white transition-colors">✕</button>
         </header>
         
-        <div className="p-8 border-b border-white/5">
+        <div className="p-6 sm:p-8 border-b border-white/5">
           <input 
             type="text" 
             placeholder="Filter repositories..." 
             value={filter}
             onChange={e => setFilter(e.target.value)}
-            className="w-full bg-white/5 border border-white/10 p-3 text-[12px] text-white focus:outline-none focus:border-cobalt"
+            className="w-full bg-white/5 border border-white/10 p-4 text-[12px] text-white focus:outline-none focus:border-cobalt rounded"
           />
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
           {loading ? (
-            <div className="h-40 flex items-center justify-center text-[10px] tracking-widest text-white/20 uppercase animate-pulse">Scanning_Uplink...</div>
+            <div className="h-60 flex flex-col gap-4 items-center justify-center text-[10px] tracking-widest text-white/20 uppercase">
+              <div className="w-8 h-8 border-2 border-cobalt border-t-transparent rounded-full animate-spin" />
+              Scanning_Uplink...
+            </div>
           ) : filtered.length === 0 ? (
-            <div className="h-40 flex items-center justify-center text-[10px] tracking-widest text-white/20 uppercase">No_Available_Modules</div>
+            <div className="h-60 flex items-center justify-center text-[10px] tracking-widest text-white/20 uppercase">No_Available_Modules</div>
           ) : (
             <div className="grid grid-cols-1 gap-2">
               {filtered.map(r => (
-                <div key={r.fullName} className="p-4 border border-white/5 bg-white/[0.02] flex items-center justify-between group hover:border-white/20 transition-all">
-                  <div className="flex flex-col gap-1 overflow-hidden">
+                <div key={r.fullName} className="p-4 border border-white/5 bg-white/[0.02] flex items-center justify-between group hover:border-white/10 transition-all rounded-lg">
+                  <div className="flex flex-col gap-1 overflow-hidden pr-4">
                     <span className="text-[12px] font-black text-white truncate">{r.name}</span>
                     <span className="text-[9px] text-white/40 truncate">{r.fullName}</span>
                   </div>
                   <button 
                     onClick={() => onImport(r)}
-                    className="px-6 py-2 bg-cobalt text-white text-[9px] font-black uppercase hover:bg-cobalt-light transition-all"
+                    className="px-6 py-2 bg-cobalt text-white text-[9px] font-black uppercase hover:bg-cobalt-light transition-all shrink-0 rounded"
                   >
                     Import
                   </button>
@@ -371,36 +382,36 @@ function ProjectsTab({ onLog }: { onLog: (msg: string) => void }) {
       <div className="flex flex-col gap-6">
         <header className="flex justify-between items-center border-b border-white/5 pb-3">
           <p className="text-[11px] text-white font-black tracking-widest uppercase">/ MODULE_REPOSITORY</p>
-          <div className="flex gap-6 items-center">
+          <div className="flex gap-4 sm:gap-6 items-center">
             <button onClick={() => setShowImport(true)} className="text-[10px] text-cobalt font-black tracking-widest hover:underline uppercase transition-all">[IMPORT_SELECTIVE]</button>
-            <button onClick={() => { setEditingIdx(null); setForm(emptyProject); }} className="text-[10px] text-white/40 hover:text-white tracking-widest font-black uppercase">[+] NEW_MODULE</button>
+            <button onClick={() => { setEditingIdx(null); setForm(emptyProject); }} className="text-[10px] text-white/40 hover:text-white tracking-widest font-black uppercase">[+] NEW</button>
           </div>
         </header>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
           {projects.map((p, i) => (
-            <button key={i} onClick={() => select(i)} className={`p-5 border text-left transition-all ${editingIdx === i ? 'border-cobalt bg-cobalt/5 text-white shadow-[0_0_20px_rgba(0,85,255,0.1)]' : 'border-white/5 bg-[#222222] hover:border-white/20 text-white/60'}`}>
-              <p className="text-[11px] font-black uppercase truncate">{p.name}</p>
+            <button key={i} onClick={() => select(i)} className={`p-4 border text-left transition-all rounded-lg ${editingIdx === i ? 'border-cobalt bg-cobalt/10 text-white shadow-[0_0_20px_rgba(0,85,255,0.15)]' : 'border-white/5 bg-white/[0.03] hover:border-white/20 text-white/60'}`}>
+              <p className="text-[10px] font-black uppercase truncate leading-tight">{p.name}</p>
               <div className="flex justify-between items-center opacity-30 mt-2">
-                <p className="text-[9px] tracking-widest uppercase">ORDER_{p.order}</p>
-                {p.isFavorite && <span className="text-[10px]">★</span>}
+                <p className="text-[8px] tracking-widest uppercase">ORDER_{p.order}</p>
+                {p.isFavorite && <span className="text-[9px]">★</span>}
               </div>
             </button>
           ))}
         </div>
       </div>
 
-      <div className="bg-[#222222] border border-white/10 p-12 shadow-2xl">
+      <div className="bg-[#1a1a1a] border border-white/10 p-6 sm:p-10 shadow-2xl rounded-xl">
         <SectionHeader title={editingIdx !== null ? `TERMINAL_CONFIG: ${projects[editingIdx].name}` : 'INITIALIZING_DATA'} />
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-20 gap-y-10">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8">
           <Field label="NAME" required><input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className={inputClass} placeholder="SYSTEM_MODULE" /></Field>
           
-          <div className="col-span-2 flex gap-6">
+          <div className="col-span-1 md:col-span-2 flex flex-col sm:flex-row gap-4">
             <div className="flex-1"><Field label="GITHUB_ENDPOINT"><input value={form.gitUrl} onChange={e => setForm(f => ({ ...f, gitUrl: e.target.value }))} className={inputClass} placeholder="https://github.com/..." /></Field></div>
-            <button onClick={fetchGitHub} disabled={scanLoading} className="self-end px-8 py-3 bg-cobalt text-white text-[11px] font-black tracking-widest hover:bg-cobalt-light uppercase transition-all shadow-[0_0_15px_rgba(0,85,255,0.2)]">{scanLoading ? 'SCANNING...' : 'SYNC_METADATA'}</button>
+            <button onClick={fetchGitHub} disabled={scanLoading} className="sm:self-end px-8 py-3 bg-cobalt text-white text-[10px] font-black tracking-widest hover:bg-cobalt-light uppercase transition-all shadow-[0_0_15px_rgba(0,85,255,0.2)] rounded">{scanLoading ? 'SCANNING...' : 'SYNC_METADATA'}</button>
           </div>
 
-          <div className="col-span-2 flex flex-wrap gap-12 border-t border-white/5 pt-10">
+          <div className="col-span-1 md:col-span-2 flex flex-wrap gap-x-10 gap-y-4 border-y border-white/5 py-8 my-2">
             <CheckField label="HIGH_VALUE" value={form.isHighlighted} onChange={v => setForm(f => ({ ...f, isHighlighted: v }))} />
             <CheckField label="PINNED" value={form.isFavorite} onChange={v => setForm(f => ({ ...f, isFavorite: v }))} />
             <CheckField label="REDACTED" value={form.isPrivate} onChange={v => setForm(f => ({ ...f, isPrivate: v }))} />
@@ -409,24 +420,24 @@ function ProjectsTab({ onLog }: { onLog: (msg: string) => void }) {
           <Field label="OVERVIEW_BRIEF"><input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} className={inputClass} /></Field>
           <Field label="BUSINESS_IMPACT"><input value={form.businessImpact} onChange={e => setForm(f => ({ ...f, businessImpact: e.target.value }))} className={inputClass} /></Field>
           
-          <div className="col-span-2 grid grid-cols-2 gap-10 border-t border-white/5 pt-10">
+          <div className="col-span-1 md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-10 pt-4">
             <div className="space-y-4">
               <Field label="VISUAL_ASSET [IMG]">
                 <div className="flex gap-2">
                   <input value={form.photo} onChange={e => setForm(f => ({ ...f, photo: e.target.value }))} className={`${inputClass} flex-1`} />
-                  <button onClick={() => photoInputRef.current?.click()} className="px-4 py-1 border border-white/10 text-white/40 text-[10px] hover:text-white uppercase transition-all">↑</button>
+                  <button onClick={() => photoInputRef.current?.click()} className="px-4 py-1 border border-white/10 text-white/40 text-[10px] hover:text-white uppercase transition-all rounded">↑</button>
                   <input ref={photoInputRef} type="file" className="hidden" onChange={handlePhotoUpload} />
                 </div>
               </Field>
-              {form.photo && <div className="border border-white/10 p-2 bg-black/40"><img src={form.photo} className="h-32 w-full object-cover grayscale opacity-60" /></div>}
+              {form.photo && <div className="border border-white/10 p-2 bg-black/40 rounded overflow-hidden"><img src={form.photo} className="h-32 w-full object-cover grayscale opacity-60" /></div>}
             </div>
             <div className="space-y-4">
               <Field label="STREAM_SOURCE [VIDEO]"><input value={form.video} onChange={e => setForm(f => ({ ...f, video: e.target.value }))} className={inputClass} /></Field>
             </div>
           </div>
 
-          <div className="col-span-2"><Field label="SYSTEM_ARCHITECTURE"><textarea value={form.architecture} onChange={e => setForm(f => ({ ...f, architecture: e.target.value }))} className={`${inputClass} h-24 resize-none`} /></Field></div>
-          <div className="col-span-2"><Field label="INIT_SEQUENCE"><textarea value={form.initSequence} onChange={e => setForm(f => ({ ...f, initSequence: e.target.value }))} className={`${inputClass} h-16 resize-none`} /></Field></div>
+          <div className="col-span-1 md:col-span-2"><Field label="SYSTEM_ARCHITECTURE"><textarea value={form.architecture} onChange={e => setForm(f => ({ ...f, architecture: e.target.value }))} className={`${inputClass} h-24 resize-none`} /></Field></div>
+          <div className="col-span-1 md:col-span-2"><Field label="INIT_SEQUENCE"><textarea value={form.initSequence} onChange={e => setForm(f => ({ ...f, initSequence: e.target.value }))} className={`${inputClass} h-16 resize-none`} /></Field></div>
 
           <Field label="TECH_STACK (CSV)"><input value={form.stack} onChange={e => setForm(f => ({ ...f, stack: e.target.value }))} className={inputClass} /></Field>
           <Field label="STATUS">
@@ -444,9 +455,9 @@ function ProjectsTab({ onLog }: { onLog: (msg: string) => void }) {
           <Field label="REPO_SLUG"><input value={form.specsRepoSlug} onChange={e => setForm(f => ({ ...f, specsRepoSlug: e.target.value }))} className={inputClass} /></Field>
         </div>
 
-        <div className="mt-12 flex items-center gap-10 border-t border-white/5 pt-10">
-          <button onClick={save} className="bg-cobalt text-white text-[11px] font-black tracking-[0.3em] uppercase px-12 py-5 hover:bg-cobalt-light transition-all shadow-[0_0_30px_rgba(0,85,255,0.2)]">COMMIT_CHANGES [CTRL+S]</button>
-          {editingIdx !== null && <button onClick={() => { if(confirm('DECOMMISSION?')) { const n = projects.filter((_, i) => i !== editingIdx); localStorage.setItem('portfolioProjects', JSON.stringify(n)); load(); setEditingIdx(null); } }} className="text-[10px] text-err opacity-50 hover:opacity-100 tracking-widest uppercase">DECOMMISSION</button>}
+        <div className="mt-12 flex flex-col sm:flex-row items-center gap-6 sm:gap-10 border-t border-white/5 pt-10">
+          <button onClick={save} className="w-full sm:w-auto bg-cobalt text-white text-[11px] font-black tracking-[0.3em] uppercase px-12 py-5 hover:bg-cobalt-light transition-all shadow-[0_0_30px_rgba(0,85,255,0.2)] rounded">COMMIT_CHANGES [CTRL+S]</button>
+          {editingIdx !== null && <button onClick={() => { if(confirm('DECOMMISSION?')) { const n = projects.filter((_, i) => i !== editingIdx); localStorage.setItem('portfolioProjects', JSON.stringify(n)); load(); setEditingIdx(null); } }} className="text-[10px] text-err opacity-50 hover:opacity-100 tracking-widest uppercase transition-colors">DECOMMISSION</button>}
         </div>
       </div>
     </div>
@@ -509,27 +520,27 @@ function TechTab({ onLog }: { onLog: (msg: string) => void }) {
         <p className="text-[11px] text-white font-black tracking-widest uppercase">/ TECH_MATRIX_REGISTRY</p>
         <button onClick={scanAll} disabled={loading} className="text-[10px] text-cobalt hover:underline uppercase transition-all tracking-widest">{loading ? 'SCANNING_GITHUB...' : '[REFRESH_FROM_GITHUB]'}</button>
       </header>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
         {tools.map((t, i) => (
-          <button key={i} onClick={() => { setEditing(i); setForm({ name: t.name, version: t.version, usageLevel: t.usageLevel }); }} className={`p-6 border text-left transition-all ${editing === i ? 'border-cobalt bg-cobalt/5 text-white shadow-lg' : 'border-white/5 bg-[#222222] hover:border-white/20 text-white'}`}>
+          <button key={i} onClick={() => { setEditing(i); setForm({ name: t.name, version: t.version, usageLevel: t.usageLevel }); }} className={`p-6 border text-left transition-all rounded-lg ${editing === i ? 'border-cobalt bg-cobalt/10 text-white shadow-lg' : 'border-white/5 bg-white/[0.03] hover:border-white/20 text-white'}`}>
             <div className="flex justify-between items-center mb-4">
               <p className="text-[12px] font-black uppercase">{t.name}</p>
               <span className={`text-[11px] font-black ${editing === i ? 'text-white' : 'text-cobalt'}`}>{t.usageLevel}%</span>
             </div>
-            <div className={`h-1 w-full ${editing === i ? 'bg-white/20' : 'bg-white/5'}`}><div className={`h-full ${editing === i ? 'bg-white' : 'bg-cobalt'} transition-all`} style={{ width: `${t.usageLevel}%` }} /></div>
+            <div className={`h-1.5 w-full rounded-full ${editing === i ? 'bg-white/20' : 'bg-white/5'}`}><div className={`h-full rounded-full ${editing === i ? 'bg-white' : 'bg-cobalt'} transition-all`} style={{ width: `${t.usageLevel}%` }} /></div>
           </button>
         ))}
       </div>
-      <div className="bg-[#222222] border border-white/10 p-10 space-y-8 shadow-2xl">
+      <div className="bg-[#1a1a1a] border border-white/10 p-6 sm:p-10 space-y-8 shadow-2xl rounded-xl">
         <SectionHeader title={editing !== null ? 'UPDATE_TOOL' : 'ADD_NEW_TOOL'} />
-        <div className="grid grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
           <Field label="NAME"><input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className={inputClass} /></Field>
           <Field label="VERSION"><input value={form.version} onChange={e => setForm(f => ({ ...f, version: e.target.value }))} className={inputClass} /></Field>
           <Field label="USAGE_%"><input type="number" value={form.usageLevel} onChange={e => setForm(f => ({ ...f, usageLevel: Number(e.target.value) }))} className={inputClass} /></Field>
         </div>
-        <div className="flex gap-4 border-t border-white/5 pt-8">
-          <button onClick={save} className="px-8 py-3 bg-cobalt text-white text-[10px] font-black uppercase tracking-widest">SAVE_TOOL</button>
-          {editing !== null && <button onClick={() => { setTools(tools.filter((_, i) => i !== editing)); setEditing(null); setForm({ name: '', version: '', usageLevel: 80 }); }} className="text-err text-[10px] font-black uppercase tracking-widest ml-auto">DELETE</button>}
+        <div className="flex gap-6 border-t border-white/5 pt-8">
+          <button onClick={save} className="px-10 py-3 bg-cobalt text-white text-[10px] font-black uppercase tracking-widest rounded">SAVE_TOOL</button>
+          {editing !== null && <button onClick={() => { setTools(tools.filter((_, i) => i !== editing)); setEditing(null); setForm({ name: '', version: '', usageLevel: 80 }); }} className="text-err opacity-50 hover:opacity-100 text-[10px] font-black uppercase tracking-widest ml-auto">DELETE</button>}
         </div>
       </div>
     </div>
@@ -564,21 +575,23 @@ function AmbitionsTab({ onLog }: { onLog: (msg: string) => void }) {
       <header className="border-b border-white/5 pb-3"><p className="text-[11px] text-white font-black tracking-widest uppercase">/ STRATEGIC_ROADMAP</p></header>
       <div className="flex flex-col gap-2">
         {items.map((i, idx) => (
-          <button key={idx} onClick={() => { setEditingIdx(idx); setForm({ text: i.text, completed: i.completed }); }} className={`p-4 border text-left transition-all flex items-center gap-4 ${editingIdx === idx ? 'border-cobalt bg-cobalt/5 text-white shadow-lg' : 'border-white/5 bg-[#222222] hover:border-white/20 text-white'}`}>
-            <div className={`w-3 h-3 border ${i.completed ? (editingIdx === idx ? 'bg-white border-white' : 'bg-cobalt border-cobalt') : 'border-white/20'}`} />
-            <span className="text-[12px] font-black uppercase">{i.text}</span>
+          <button key={idx} onClick={() => { setEditingIdx(idx); setForm({ text: i.text, completed: i.completed }); }} className={`p-5 border text-left transition-all flex items-center gap-6 rounded-lg ${editingIdx === idx ? 'border-cobalt bg-cobalt/10 text-white shadow-lg' : 'border-white/5 bg-white/[0.03] hover:border-white/20 text-white'}`}>
+            <div className={`w-5 h-5 border rounded flex items-center justify-center transition-all ${i.completed ? (editingIdx === idx ? 'bg-white border-white' : 'bg-cobalt border-cobalt') : 'border-white/20'}`}>
+                {i.completed && <span className={`text-[12px] ${editingIdx === idx ? 'text-cobalt' : 'text-white'}`}>✓</span>}
+            </div>
+            <span className="text-[12px] font-black uppercase tracking-wide flex-1">{i.text}</span>
           </button>
         ))}
       </div>
-      <div className="bg-[#222222] border border-white/10 p-10 space-y-8 shadow-2xl">
+      <div className="bg-[#1a1a1a] border border-white/10 p-6 sm:p-10 space-y-8 shadow-2xl rounded-xl">
         <SectionHeader title={editingIdx !== null ? 'EDIT_OBJECTIVE' : 'ADD_OBJECTIVE'} />
-        <div className="flex gap-8 items-end">
-          <div className="flex-1"><Field label="GOAL_DESCRIPTION"><input value={form.text} onChange={e => setForm(f => ({ ...f, text: e.target.value }))} className={inputClass} /></Field></div>
-          <CheckField label="COMPLETED" value={form.completed} onChange={v => setForm(f => ({ ...f, completed: v }))} />
+        <div className="flex flex-col sm:flex-row gap-8 items-start sm:items-end">
+          <div className="flex-1 w-full"><Field label="GOAL_DESCRIPTION"><input value={form.text} onChange={e => setForm(f => ({ ...f, text: e.target.value }))} className={inputClass} /></Field></div>
+          <div className="pb-2"><CheckField label="COMPLETED" value={form.completed} onChange={v => setForm(f => ({ ...f, completed: v }))} /></div>
         </div>
-        <div className="flex gap-4 border-t border-white/5 pt-8">
-          <button onClick={save} className="px-8 py-3 bg-cobalt text-white text-[10px] font-black uppercase tracking-widest">SAVE_GOAL</button>
-          {editingIdx !== null && <button onClick={() => { setItems(items.filter((_, i) => i !== editingIdx)); setEditingIdx(null); setForm({ text: '', completed: false }); }} className="text-err text-[10px] font-black uppercase tracking-widest ml-auto">DELETE</button>}
+        <div className="flex gap-6 border-t border-white/5 pt-8">
+          <button onClick={save} className="px-10 py-3 bg-cobalt text-white text-[10px] font-black uppercase tracking-widest rounded">SAVE_GOAL</button>
+          {editingIdx !== null && <button onClick={() => { setItems(items.filter((_, i) => i !== editingIdx)); setEditingIdx(null); setForm({ text: '', completed: false }); }} className="text-err opacity-50 hover:opacity-100 text-[10px] font-black uppercase tracking-widest ml-auto">DELETE</button>}
         </div>
       </div>
     </div>
@@ -622,33 +635,33 @@ function SettingsTab({ onLog }: { onLog: (msg: string) => void }) {
   return (
     <div className="flex flex-col gap-10">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-        <div className="bg-[#222222] border border-white/10 p-10 space-y-10 shadow-2xl">
-          <p className="text-[11px] text-white font-black tracking-widest uppercase">/ MASTER_CONTROLS</p>
-          <div className="space-y-6">
-            <Field label="AVAILABILITY (%)"><input type="range" min={0} max={100} step={0.1} value={settings.availabilityValue} onChange={e => update({ availabilityValue: Number(e.target.value) })} className="w-full accent-cobalt h-1 bg-white/5 appearance-none" /></Field>
+        <div className="bg-[#1a1a1a] border border-white/10 p-6 sm:p-10 space-y-10 shadow-2xl rounded-xl">
+          <p className="text-[11px] text-white font-black tracking-widest uppercase opacity-40">/ MASTER_CONTROLS</p>
+          <div className="space-y-8">
+            <Field label="AVAILABILITY (%)"><input type="range" min={0} max={100} step={0.1} value={settings.availabilityValue} onChange={e => update({ availabilityValue: Number(e.target.value) })} className="w-full accent-cobalt h-1.5 bg-white/5 appearance-none rounded-full" /></Field>
             <Field label="SYSTEM_STATUS"><select value={settings.status} onChange={e => update({ status: e.target.value as any })} className={inputClass}><option value="ONLINE">ONLINE</option><option value="BUSY">BUSY</option><option value="OFFLINE">OFFLINE</option></select></Field>
             <Field label="LOG_LIMIT"><input type="number" value={settings.logLimit} onChange={e => update({ logLimit: Number(e.target.value) })} className={inputClass} /></Field>
           </div>
         </div>
-        <div className="bg-[#222222] border border-white/10 p-10 space-y-10 shadow-2xl">
-          <p className="text-[11px] text-white font-black tracking-widest uppercase">/ ENGINE_PARAMS</p>
-          <div className="space-y-8">
-            <Field label={`DUST_THRESHOLD: ${settings.dustThresholdDays} DAYS`}><input type="range" min={7} max={365} value={settings.dustThresholdDays} onChange={e => update({ dustThresholdDays: Number(e.target.value) })} className="w-full accent-warn h-1 bg-white/5 appearance-none" /></Field>
-            <Field label={`GOLD_REQUIREMENT: ${settings.starsForGold} STARS`}><input type="range" min={0} max={50} value={settings.starsForGold} onChange={e => update({ starsForGold: Number(e.target.value) })} className="w-full accent-bronze h-1 bg-white/5 appearance-none" /></Field>
+        <div className="bg-[#1a1a1a] border border-white/10 p-6 sm:p-10 space-y-10 shadow-2xl rounded-xl">
+          <p className="text-[11px] text-white font-black tracking-widest uppercase opacity-40">/ ENGINE_PARAMS</p>
+          <div className="space-y-10">
+            <Field label={`DUST_THRESHOLD: ${settings.dustThresholdDays} DAYS`}><input type="range" min={7} max={365} value={settings.dustThresholdDays} onChange={e => update({ dustThresholdDays: Number(e.target.value) })} className="w-full accent-warn h-1.5 bg-white/5 appearance-none rounded-full" /></Field>
+            <Field label={`GOLD_REQUIREMENT: ${settings.starsForGold} STARS`}><input type="range" min={0} max={50} value={settings.starsForGold} onChange={e => update({ starsForGold: Number(e.target.value) })} className="w-full accent-bronze h-1.5 bg-white/5 appearance-none rounded-full" /></Field>
           </div>
         </div>
-        <div className="bg-[#222222] border border-white/10 p-10 space-y-10 shadow-2xl col-span-2">
-          <p className="text-[11px] text-white font-black tracking-widest uppercase">/ ASSETS_&_CACHE</p>
-          <div className="space-y-6">
+        <div className="bg-[#1a1a1a] border border-white/10 p-6 sm:p-10 space-y-10 shadow-2xl col-span-1 md:col-span-2 rounded-xl">
+          <p className="text-[11px] text-white font-black tracking-widest uppercase opacity-40">/ ASSETS_&_CACHE</p>
+          <div className="space-y-8">
             <Field label="CV_ENDPOINT">
-              <div className="flex gap-4 items-center">
+              <div className="flex flex-col sm:flex-row gap-4 items-center">
                 <input value={settings.cvUrl} readOnly className={`${inputClass} flex-1 text-white/40`} />
                 <input type="file" onChange={uploadCv} className="hidden" id="cv-up" />
-                <label htmlFor="cv-up" className="px-6 py-2 border border-white text-white text-[10px] font-black uppercase cursor-pointer hover:bg-white hover:text-black transition-all">{cvLoading ? '...' : 'UPLOAD'}</label>
+                <label htmlFor="cv-up" className="w-full sm:w-auto px-10 py-3 border border-white/10 bg-white/5 text-white text-[10px] font-black uppercase cursor-pointer hover:bg-white hover:text-black transition-all rounded text-center">{cvLoading ? '...' : 'UPLOAD_PDF'}</label>
               </div>
             </Field>
-            <div className="pt-6 border-t border-black/5">
-              <button onClick={() => { if(confirm('RESET?')) { localStorage.clear(); window.location.reload(); } }} className="w-full py-4 border border-red-500/30 text-red-500 text-[10px] font-black uppercase hover:bg-red-500/5 transition-all">FACTORY_RESET_CACHE</button>
+            <div className="pt-6 border-t border-white/5">
+              <button onClick={() => { if(confirm('RESET?')) { localStorage.clear(); window.location.reload(); } }} className="w-full py-4 border border-err/30 text-err text-[10px] font-black uppercase hover:bg-err/5 transition-all rounded tracking-[0.2em]">FACTORY_RESET_CACHE</button>
             </div>
           </div>
         </div>
@@ -682,18 +695,20 @@ function PublishTab({ onLog }: { onLog: (msg: string) => void }) {
 
   return (
     <div className="flex flex-col gap-12">
-      <div className="bg-[#222222] border border-white/10 p-12 flex flex-col gap-10 shadow-2xl">
+      <div className="bg-[#1a1a1a] border border-white/10 p-8 sm:p-12 flex flex-col gap-10 shadow-2xl rounded-xl">
         <div><p className="text-[13px] text-white font-black tracking-[0.3em] uppercase mb-2">/ DEPLOYMENT_BRIDGE</p><p className="text-[11px] text-white/40 tracking-widest uppercase">Sync local state with production grid.</p></div>
-        <div className="p-6 bg-black border border-white/10 shadow-inner"><p className="text-[9px] text-white/30 tracking-widest uppercase mb-1">target_uplink:</p><p className="text-[12px] text-cobalt font-black tracking-[0.2em]">{repo}</p></div>
-        <button onClick={publish} disabled={publishing} className="bg-cobalt text-white text-[11px] font-black tracking-[0.4em] py-6 hover:bg-cobalt-light transition-all shadow-[0_0_50px_rgba(0,85,255,0.2)]">{publishing ? 'SYNCHRONIZING...' : 'EXECUTE_PUBLISH_SEQUENCE \u2191'}</button>
+        <div className="p-6 bg-black/40 border border-white/10 rounded overflow-hidden"><p className="text-[9px] text-white/30 tracking-widest uppercase mb-1">target_uplink:</p><p className="text-[12px] text-cobalt font-black tracking-[0.2em] truncate">{repo}</p></div>
+        <button onClick={publish} disabled={publishing} className="bg-cobalt text-white text-[11px] font-black tracking-[0.4em] py-6 hover:bg-cobalt-light transition-all shadow-[0_0_50px_rgba(0,85,255,0.2)] rounded-lg">{publishing ? 'SYNCHRONIZING...' : 'EXECUTE_PUBLISH_SEQUENCE \u2191'}</button>
       </div>
       <div className="space-y-6">
         <p className="text-[10px] text-white/40 tracking-widest font-black uppercase">/ BUILD_HISTORY</p>
-        <div className="border border-white/10 bg-[#222222] divide-y divide-white/5 shadow-2xl">
-          {builds.map(b => (
-            <div key={b.buildNumber} className="px-8 py-4 flex items-center justify-between group hover:bg-white/5">
-              <div className="flex items-center gap-6"><span className="text-cobalt font-black">#{b.buildNumber}</span><span className="text-[10px] text-white tracking-widest uppercase">{b.status}</span><span className="text-[10px] text-white/30 font-mono">{b.timestamp}</span></div>
-              <span className="text-[9px] text-white/20 tracking-widest italic opacity-0 group-hover:opacity-100 transition-opacity">[{b.files.join(', ')}]</span>
+        <div className="border border-white/10 bg-[#1a1a1a] divide-y divide-white/5 shadow-2xl rounded-xl overflow-hidden">
+          {builds.length === 0 ? (
+            <div className="p-8 text-center text-[10px] text-white/20 uppercase tracking-widest">No history recorded</div>
+          ) : builds.map(b => (
+            <div key={b.buildNumber} className="px-8 py-5 flex items-center justify-between group hover:bg-white/5 transition-colors">
+              <div className="flex items-center gap-6"><span className="text-cobalt font-black">#{b.buildNumber}</span><span className="text-[10px] text-white tracking-widest uppercase font-bold">{b.status}</span><span className="text-[10px] text-white/30 font-mono">{b.timestamp}</span></div>
+              <span className="text-[9px] text-white/20 tracking-widest italic opacity-0 group-hover:opacity-100 transition-opacity hidden sm:inline">[{b.files.join(', ')}]</span>
             </div>
           ))}
         </div>
@@ -708,6 +723,7 @@ export default function AdminPanel() {
   const [auth, setAuth] = useState(false);
   const [tab, setTab] = useState<string>('projects');
   const [logs, setLogs] = useState<string[]>(['SYSTEM_READY', 'AWAITING_INPUT']);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const addLog = useCallback((msg: string) => { setLogs(prev => [`${new Date().toLocaleTimeString()} > ${msg}`, ...prev].slice(0, 50)); }, []);
 
@@ -715,51 +731,78 @@ export default function AdminPanel() {
     if (isSessionValid()) setAuth(true);
   }, []);
 
-  if (!auth) return <PasswordGate onAuth={() => setAuth(true)} />;
+  if (!auth) return <GitHubAuthGate onAuth={() => setAuth(true)} />;
+
+  const tabs = [
+    { id: 'projects', label: 'PROJECT_MODULES', icon: '◈' },
+    { id: 'tech', label: 'TECH_REGISTRY', icon: '◰' },
+    { id: 'ambitions', label: 'ROADMAP_MAPPER', icon: '▲' },
+    { id: 'settings', label: 'SYSTEM_CONFIG', icon: '⚙' },
+    { id: 'publish', label: 'PUBLISH_BRIDGE', icon: '↑' },
+  ];
 
   return (
-    <div className="h-screen bg-[#1a1a1a] flex overflow-hidden font-mono text-white select-none">
+    <div className="min-h-screen bg-[#0d0d0d] flex flex-col lg:flex-row font-mono text-white select-none">
       
-      {/* Sidebar Nav */}
-      <aside className="w-80 border-r border-white/5 flex flex-col shrink-0 bg-[#222222] shadow-2xl z-10">
-        <div className="p-12 border-b border-white/5 flex flex-col gap-2">
-          <p className="text-[15px] text-white font-black tracking-[0.4em] uppercase leading-none">Core_Admin</p>
-          <div className="flex items-center gap-2"><span className="w-1.5 h-1.5 bg-cobalt rounded-full animate-pulse shadow-[0_0_10px_rgba(0,85,255,0.8)]" /><p className="text-[9px] text-cobalt tracking-widest uppercase font-black">Active_Session</p></div>
+      {/* MOBILE HEADER */}
+      <header className="lg:hidden h-16 bg-[#121212] border-b border-white/10 px-6 flex items-center justify-between sticky top-0 z-50 backdrop-blur-xl">
+        <p className="text-[14px] font-black tracking-[0.2em] uppercase">Core_Admin</p>
+        <button 
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)} 
+          className="w-10 h-10 flex items-center justify-center bg-white/5 rounded-lg border border-white/10 active:scale-95 transition-all"
+        >
+          {mobileMenuOpen ? '✕' : '☰'}
+        </button>
+      </header>
+
+      {/* SIDEBAR NAVIGATION */}
+      <aside className={`
+        fixed lg:relative inset-y-0 left-0 w-80 bg-[#121212] border-r border-white/5 flex flex-col shrink-0 z-[60] transition-transform duration-300 shadow-2xl
+        ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+      `}>
+        <div className="hidden lg:flex p-12 border-b border-white/5 flex flex-col gap-2">
+          <p className="text-[16px] text-white font-black tracking-[0.4em] uppercase leading-none">Core_Admin</p>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 bg-cobalt rounded-full animate-pulse shadow-[0_0_10px_rgba(0,85,255,0.8)]" />
+            <p className="text-[9px] text-cobalt tracking-widest uppercase font-black">Active_Session</p>
+          </div>
         </div>
-        <nav className="flex-1 p-6 flex flex-col gap-2">
-          {[
-            { id: 'projects', label: 'PROJECT_MODULES' },
-            { id: 'tech', label: 'TECH_REGISTRY' },
-            { id: 'ambitions', label: 'ROADMAP_MAPPER' },
-            { id: 'settings', label: 'SYSTEM_CONFIG' },
-            { id: 'publish', label: 'PUBLISH_BRIDGE' },
-          ].map(t => (
-            <button key={t.id} onClick={() => { setTab(t.id); addLog(`NAV_TO: ${t.id.toUpperCase()}`); }} className={`text-left px-8 py-5 text-[11px] font-black tracking-[0.3em] uppercase transition-all duration-200 border-l-2 ${tab === t.id ? 'bg-cobalt/10 text-cobalt border-l-cobalt shadow-[inset_0_0_20px_rgba(0,85,255,0.05)]' : 'border-l-transparent text-white/20 hover:text-white/40'}`}>
-              {t.label}
+
+        <nav className="flex-1 p-6 flex flex-col gap-1 overflow-y-auto custom-scrollbar">
+          {tabs.map(t => (
+            <button 
+              key={t.id} 
+              onClick={() => { setTab(t.id); addLog(`NAV_TO: ${t.id.toUpperCase()}`); setMobileMenuOpen(false); }} 
+              className={`text-left px-8 py-5 text-[11px] font-black tracking-[0.3em] uppercase transition-all duration-200 border-l-2 flex items-center gap-4 rounded-r-lg ${tab === t.id ? 'bg-cobalt/10 text-cobalt border-l-cobalt shadow-[inset_0_0_20px_rgba(0,85,255,0.05)]' : 'border-l-transparent text-white/20 hover:text-white/40 hover:bg-white/2'}`}
+            >
+              <span className="opacity-40">{t.icon}</span> {t.label}
             </button>
           ))}
         </nav>
         
-        <div className="p-10 border-t border-white/5 flex flex-col gap-4">
+        <div className="p-8 border-t border-white/5 flex flex-col gap-3 bg-[#0d0d0d]/40">
           <button 
             onClick={() => window.location.href = '/'}
-            className="w-full py-4 border border-white/10 text-[10px] font-black uppercase tracking-widest hover:bg-white hover:text-black transition-all flex items-center justify-center gap-3"
+            className="w-full py-4 border border-white/10 text-[10px] font-black uppercase tracking-widest hover:bg-white hover:text-black transition-all flex items-center justify-center gap-3 rounded"
           >
             <span>←</span> EXIT_TO_SITE
           </button>
           <button 
             onClick={() => { sessionStorage.removeItem(SESSION_KEY); window.location.reload(); }} 
-            className="text-[10px] text-red-400/40 hover:text-red-400 tracking-widest uppercase transition-all text-center"
+            className="py-2 text-[9px] text-err/40 hover:text-err tracking-widest uppercase transition-all text-center font-bold"
           >
             ✕ TERMINATE_SESSION
           </button>
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col min-w-0 bg-[#1a1a1a]">
-        <div className="flex-1 overflow-y-auto px-20 py-16 custom-scrollbar island-load">
-          <div className="max-w-5xl">
+      {/* OVERLAY FOR MOBILE SIDEBAR */}
+      {mobileMenuOpen && <div onClick={() => setMobileMenuOpen(false)} className="lg:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-[55]" />}
+
+      {/* MAIN CONTENT */}
+      <main className="flex-1 flex flex-col min-w-0 bg-[#0d0d0d] overflow-x-hidden">
+        <div className="flex-1 p-6 sm:p-12 lg:p-20 custom-scrollbar island-load">
+          <div className="max-w-5xl mx-auto">
             {tab === 'projects'   && <ProjectsTab onLog={addLog} />}
             {tab === 'tech'       && <TechTab onLog={addLog} />}
             {tab === 'ambitions'  && <AmbitionsTab onLog={addLog} />}
@@ -769,22 +812,24 @@ export default function AdminPanel() {
         </div>
       </main>
 
-      {/* History Sidebar */}
-      <aside className="w-80 border-l border-white/5 bg-[#222222] flex flex-col shrink-0 shadow-2xl z-10">
-        <div className="p-10 border-b border-white/5 bg-[#222222]"><p className="text-[10px] text-white/40 tracking-widest font-black uppercase leading-none">/ SESSION_HISTORY</p></div>
-        <div className="flex-1 p-8 flex flex-col gap-1 overflow-y-auto text-[10px] opacity-20 hover:opacity-100 transition-opacity">
+      {/* SESSION HISTORY (DESKTOP ONLY) */}
+      <aside className="hidden xl:flex w-80 border-l border-white/5 bg-[#121212] flex flex-col shrink-0 shadow-2xl overflow-hidden">
+        <div className="p-10 border-b border-white/5 bg-[#121212]">
+          <p className="text-[10px] text-white/40 tracking-widest font-black uppercase leading-none">/ SESSION_HISTORY</p>
+        </div>
+        <div className="flex-1 p-8 flex flex-col gap-1 overflow-y-auto text-[10px] opacity-20 hover:opacity-100 transition-opacity custom-scrollbar">
           {logs.map((l, i) => <p key={i} className={`py-1 border-b border-white/[0.03] ${i === 0 ? 'text-cobalt font-black' : 'text-white/40'}`}> {l}</p>)}
         </div>
-        <div className="p-10 bg-[#222222] border-t border-white/5 flex flex-col gap-4">
-          <div className="flex flex-col gap-1"><span className="text-[9px] text-white/20 uppercase tracking-widest font-black italic">operator:</span><p className="text-[11px] text-white font-black uppercase">admin@gest_core</p></div>
-          <div className="flex flex-col gap-1"><span className="text-[9px] text-white/20 uppercase tracking-widest font-black italic">status:</span><p className="text-[11px] text-white font-black uppercase">ENCRYPTED</p></div>
+        <div className="p-10 bg-[#121212] border-t border-white/5 flex flex-col gap-4">
+          <div className="flex flex-col gap-1"><span className="text-[9px] text-white/20 uppercase tracking-widest font-black italic">operator:</span><p className="text-[11px] text-white font-black uppercase truncate">admin@gest_core</p></div>
+          <div className="flex flex-col gap-1"><span className="text-[9px] text-white/20 uppercase tracking-widest font-black italic">status:</span><p className="text-[11px] text-green-500/80 font-black uppercase">ENCRYPTED</p></div>
         </div>
       </aside>
 
       <style dangerouslySetInnerHTML={{ __html: `
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.05); }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.08); border-radius: 10px; }
         .island-load { animation: reveal-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         @keyframes reveal-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
       `}} />
