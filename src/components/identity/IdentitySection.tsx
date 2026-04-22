@@ -102,11 +102,11 @@ export default function IdentitySection({ name, handle, bio, quote, status, avai
               <Pill variant="cobalt" className="text-[9px] font-black shadow-[0_0_15px_rgba(0,85,255,0.4)] bg-cobalt text-white">{status}</Pill>
             </div>
             
-            <h1 className="text-[24px] sm:text-[28px] font-black tracking-tighter text-white leading-none drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)]">
+            <h1 className="text-[26px] sm:text-[32px] font-black tracking-tighter text-white leading-none drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)]">
               {name.replace('\n', ' ')}
             </h1>
-            <div className="flex items-center gap-3 mt-1">
-              <span className="text-[10px] text-cobalt tracking-[0.3em] uppercase font-black">
+            <div className="flex items-center gap-3 mt-2">
+              <span className="text-[12px] text-cobalt tracking-[0.3em] uppercase font-black">
                 {handle}
               </span>
               {birthDate && calculateAge(birthDate) !== null && (
