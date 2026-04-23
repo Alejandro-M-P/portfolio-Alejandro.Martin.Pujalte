@@ -19,8 +19,24 @@ export const GET: APIRoute = async ({ request }) => {
     // return new Response('Unauthorized', { status: 401 });
   }
 
-  const hour = new Date().getUTCHours();
-  const isDailyUpdate = hour === 0;
+  // Check query params for force mode
+  const url = new URL(request.url);
+  const forceParam = url.searchParams.get('force');
+  const scheduleParam = url.searchParams.get('schedule');
+  
+  const currentHour = new Date().getUTCHours();
+  
+  // Determine mode: query param > default logic
+  let isDailyUpdate = false;
+  
+  if (forceParam === 'daily' || scheduleParam === 'daily') {
+    isDailyUpdate = true; // Force daily mode
+  } else if (forceParam === 'hourly' || scheduleParam === 'hourly') {
+    isDailyUpdate = false; // Force hourly mode
+  } else {
+    // Default: daily at 00:00 UTC
+    isDailyUpdate = currentHour === 0;
+  }
 
   try {
     const projects = projectsData as any[];
