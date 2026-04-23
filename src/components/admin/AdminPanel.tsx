@@ -608,20 +608,12 @@ function TechTab({ onLog }: { onLog: (msg: string) => void }) {
       return;
     }
     
-    // Tomar solo los PRIMEROS 5 proyectos (los rankeados, como en el index)
-    const sortedProjects = [...projectsLocal]
-      .sort((a, b) => {
-        const aScore = (a.isHighlighted ? 200 : 0) + (a.isFavorite ? 50 : 0) + (a.specs?.stars as number || 0);
-        const bScore = (b.isHighlighted ? 200 : 0) + (b.isFavorite ? 50 : 0) + (b.specs?.stars as number || 0);
-        if (bScore !== aScore) return bScore - aScore;
-        if (a.pushedAt && b.pushedAt) return new Date(b.pushedAt).getTime() - new Date(a.pushedAt).getTime();
-        return (a.order ?? 0) - (b.order ?? 0);
-      })
-      .slice(0, 5);
+    // Tomar los PRIMEROS 5 proyectos (orden de la lista)
+    const top5 = projectsLocal.slice(0, 5);
     
     // Calcular media solo de esos 5
     const totals: Record<string, { sum: number; count: number }> = {};
-    for (const p of sortedProjects) {
+    for (const p of top5) {
       const stackData = p.stackWithUsage || p.specs?.stackWithUsage;
       if (stackData && stackData.length > 0) {
         for (const s of stackData) {

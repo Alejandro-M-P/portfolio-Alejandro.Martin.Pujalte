@@ -31,20 +31,13 @@ export function deriveFromProjects(projects: Project[], versionMap: Record<strin
   const validProjects = projects.filter(p => p.stack && p.stack.length > 0);
   if (validProjects.length === 0) return [];
 
-  const sorted = [...validProjects]
-    .sort((a, b) => {
-      const aScore = (a.isHighlighted ? 2 : 0) + (a.isFavorite ? 1 : 0);
-      const bScore = (b.isHighlighted ? 2 : 0) + (b.isFavorite ? 1 : 0);
-      if (bScore !== aScore) return bScore - aScore;
-      if (a.pushedAt && b.pushedAt) return new Date(b.pushedAt).getTime() - new Date(a.pushedAt).getTime();
-      return (a.order ?? 0) - (b.order ?? 0);
-    })
-    .slice(0, maxProjects);
+  // Tomar los PRIMEROS 5 (orden de la lista, sin importar stars/favorito)
+  const top5 = validProjects.slice(0, maxProjects);
   
   const techUsages: Record<string, number> = {};
   const techCounts: Record<string, number> = {};
 
-  for (const p of sorted) {
+  for (const p of top5) {
     const stackWithUsage = p.specs?.stackWithUsage as { name: string; usageLevel: number }[] | undefined;
     
     if (stackWithUsage && stackWithUsage.length > 0) {
