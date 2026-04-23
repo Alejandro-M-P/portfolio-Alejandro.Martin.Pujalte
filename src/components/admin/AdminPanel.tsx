@@ -161,6 +161,7 @@ function RepoImportModal({ onClose, onImport, existingSlugs }: { onClose: () => 
   const [repos, setRepos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
+  const [importing, setImporting] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/github', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'getUserRepos' }) })
@@ -173,6 +174,42 @@ function RepoImportModal({ onClose, onImport, existingSlugs }: { onClose: () => 
     !existingSlugs.includes(r.fullName) && 
     (r.name.toLowerCase().includes(filter.toLowerCase()) || r.description?.toLowerCase().includes(filter.toLowerCase()))
   ) : [];
+
+  // Import con datos completos desde GitHub (como sync)
+  const handleImport = async (repo: any) => {
+    setImporting(repo.fullName);
+    try {
+      // Llamar a getRepoDetails para traer stackWithUsage completo
+      const res = await fetch('/api/github', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'getRepoDetails', repoSlug: repo.fullName })
+      });
+      if (!res.ok) throw new Error('Failed');
+      const details = await res.json();
+      
+      // Pasar todo al onImport
+      onImport({
+        ...repo,
+        stackWithUsage: details.stackWithUsage || [],
+        specs: {
+          status: 'STABLE',
+          stars: details.specsStars || repo.stars,
+          language: details.specsLanguage || repo.language,
+          repo: details.specsRepo || repo.url,
+          repoSlug: details.specsRepoSlug || repo.fullName,
+          stackWithUsage: details.stackWithUsage || []
+        },
+        isPrivate: details.isPrivate || repo.private
+      });
+    } catch (e) {
+      console.error('Import error:', e);
+      // Fallback basico
+      onImport(repo);
+    } finally {
+      setImporting(null);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black/90 backdrop-blur-md">
@@ -209,10 +246,11 @@ function RepoImportModal({ onClose, onImport, existingSlugs }: { onClose: () => 
                     <span className="text-[9px] text-white/40 truncate">{r.fullName}</span>
                   </div>
                   <button 
-                    onClick={() => onImport(r)}
-                    className="px-6 py-2 bg-cobalt text-white text-[9px] font-black uppercase hover:bg-cobalt-light transition-all shrink-0 rounded"
+                    onClick={() => handleImport(r)}
+                    disabled={importing === r.fullName}
+                    className="px-6 py-2 bg-cobalt text-white text-[9px] font-black uppercase hover:bg-cobalt-light transition-all shrink-0 rounded disabled:opacity-50"
                   >
-                    Import
+                    {importing === r.fullName ? '...' : 'Import'}
                   </button>
                 </div>
               ))}
@@ -267,22 +305,30 @@ function ProjectsTab({ onLog }: { onLog: (msg: string) => void }) {
   useEffect(() => { load(); }, [load]);
 
   const handleImport = (r: any) => {
+    // Usar stackWithUsage si viene del import detallado
+    const stackWithUsage = r.stackWithUsage || r.specs?.stackWithUsage || [];
+    
     const newProj: Project = {
       id: String(Date.now()),
       name: r.name.toUpperCase(),
       description: r.description || '',
       photo: r.photo || '',
-      stack: (r.language || '').split(',').map((s: string) => s.trim().toUpperCase()).filter(Boolean),
+      stack: (r.stackWithUsage || r.language || '').split(',').map((s: string) => s.trim().toUpperCase()).filter(Boolean),
+      stackWithUsage,
       architecture: '',
       initSequence: '',
       specs: {
-        status: 'STABLE',
-        stars: r.stars || 0,
-        language: r.language || '',
-        repo: r.url || '',
-        repoSlug: r.fullName || ''
+        status: r.specs?.status || 'STABLE',
+        stars: r.specs?.stars || r.stars || 0,
+        language: r.specs?.language || r.language || '',
+        repo: r.specs?.repo || r.url || '',
+        repoSlug: r.specs?.repoSlug || r.fullName || '',
+        stackWithUsage
       },
-      pushedAt: r.pushedAt
+      pushedAt: r.pushedAt,
+      isPrivate: r.isPrivate || r.private || false,
+      isFavorite: false,
+      isHighlighted: false
     };
     
     const next = [...projects, newProj];
