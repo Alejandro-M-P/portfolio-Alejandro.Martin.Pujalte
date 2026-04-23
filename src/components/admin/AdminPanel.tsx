@@ -751,7 +751,7 @@ function PublishTab({ onLog }: { onLog: (msg: string) => void }) {
   async function publish() {
     setPublishing(true); onLog('INIT_GLOBAL_SYNC...');
     try {
-      const keys = ['portfolioProjects', 'portfolioSettings', 'portfolioExperience', 'portfolioAmbitions', 'portfolioTechstack'];
+      const keys = ['portfolioProjects', 'portfolioSettings', 'portfolioAmbitions', 'portfolioTechstack'];
       const files = keys.filter(k => !!localStorage.getItem(k)).map(k => ({ path: `public/data/${k.replace('portfolio', '').toLowerCase()}.json`, content: localStorage.getItem(k)! }));
       
       // Generar mensaje de commit basado en qué archivos cambian
