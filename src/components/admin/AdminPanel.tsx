@@ -594,7 +594,6 @@ function TechTab({ onLog }: { onLog: (msg: string) => void }) {
     if (stored) {
       projectsLocal = JSON.parse(stored);
     } else {
-      // Try data file
       try {
         const res = await fetch('/data/projects.json');
         if (res.ok) {
@@ -609,11 +608,21 @@ function TechTab({ onLog }: { onLog: (msg: string) => void }) {
       return;
     }
     
-    // Calculate tech MEDIA from projects (sum percentages / count)
+    // Tomar solo los PRIMEROS 5 proyectos (los rankeados, como en el index)
+    const sortedProjects = [...projectsLocal]
+      .sort((a, b) => {
+        const aScore = (a.isHighlighted ? 200 : 0) + (a.isFavorite ? 50 : 0) + (a.specs?.stars as number || 0);
+        const bScore = (b.isHighlighted ? 200 : 0) + (b.isFavorite ? 50 : 0) + (b.specs?.stars as number || 0);
+        if (bScore !== aScore) return bScore - aScore;
+        if (a.pushedAt && b.pushedAt) return new Date(b.pushedAt).getTime() - new Date(a.pushedAt).getTime();
+        return (a.order ?? 0) - (b.order ?? 0);
+      })
+      .slice(0, 5);
+    
+    // Calcular media solo de esos 5
     const totals: Record<string, { sum: number; count: number }> = {};
-    for (const p of projectsLocal) {
-      // Get stack from specs.stackWithUsage if available
-      const stackData = (p.specs?.stackWithUsage as any) as StackUsage[] | undefined;
+    for (const p of sortedProjects) {
+      const stackData = p.stackWithUsage || p.specs?.stackWithUsage;
       if (stackData && stackData.length > 0) {
         for (const s of stackData) {
           const clean = s.name?.toString().toUpperCase().trim();
@@ -624,7 +633,6 @@ function TechTab({ onLog }: { onLog: (msg: string) => void }) {
           }
         }
       } else {
-        // Fallback: parse from stack array
         const stack = p.stack || [];
         for (const item of stack) {
           const clean = item.toString().toUpperCase().trim();
@@ -644,7 +652,7 @@ function TechTab({ onLog }: { onLog: (msg: string) => void }) {
     
     setTools(derived); 
     localStorage.setItem('portfolioTechstack', JSON.stringify(derived));
-    onLog(`SCAN_COMPLETE: ${sorted.length} TECHNOLOGIES`);
+    onLog(`SCAN_COMPLETE: ${sorted.length} TECHNOLOGIES (TOP 5)`);
   }
 
   function save() {
