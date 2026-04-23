@@ -431,9 +431,9 @@ function ProjectsTab({ onLog }: { onLog: (msg: string) => void }) {
           </div>
 
           <div className="col-span-1 md:col-span-2 flex flex-wrap gap-x-10 gap-y-4 border-y border-white/5 py-8 my-2">
-            <CheckField label="HIGH_VALUE" value={form.isHighlighted} onChange={v => setForm(f => ({ ...f, isHighlighted: v }))} />
-            <CheckField label="PINNED" value={form.isFavorite} onChange={v => setForm(f => ({ ...f, isFavorite: v }))} />
-            <CheckField label="REDACTED" value={form.isPrivate} onChange={v => setForm(f => ({ ...f, isPrivate: v }))} />
+            <CheckField label="DESTACADO" value={form.isHighlighted} onChange={v => setForm(f => ({ ...f, isHighlighted: v }))} />
+            <CheckField label="FIJADO" value={form.isFavorite} onChange={v => setForm(f => ({ ...f, isFavorite: v }))} />
+            <CheckField label="PRIVADO" value={form.isPrivate} onChange={v => setForm(f => ({ ...f, isPrivate: v }))} />
           </div>
 
           <Field label="OVERVIEW_BRIEF"><input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} className={inputClass} /></Field>

@@ -64,20 +64,23 @@ export async function getRepoDetails(repoSlug: string) {
   const [owner, repo] = repoSlug.split('/');
   if (!owner || !repo) throw new Error('Invalid repoSlug');
 
+  // UNA SOLA QUERY para TODO: detalles + privado + README
   const graphqlQuery = `
-    query GetRepo($owner: String!, $repo: String!) {
+    query GetRepoFull($owner: String!, $repo: String!) {
       repository(owner: $owner, name: $repo) {
         name
         description
         stargazerCount
         pushedAt
         url
+        isPrivate
         languages(first: 15, orderBy: {field: SIZE, direction: DESC}) {
           edges {
             node { name color }
             size
           }
         }
+        object(expression: "HEAD:README.md") { ... on Blob { text } }
       }
     }
   `;
@@ -100,6 +103,12 @@ export async function getRepoDetails(repoSlug: string) {
   
   const r = json.data?.repository;
   if (!r) throw new Error('Repository not found');
+
+  // Decode README si existe
+  let readme = '';
+  if (r.object?.text) {
+    readme = decodeBase64(r.object.text);
+  }
 
   // Calcular percentages desde los sizes de languages
   const totalBytes = r.languages?.edges?.reduce((acc: number, e: any) => acc + (e.size || 0), 0) || 0;
@@ -124,6 +133,8 @@ export async function getRepoDetails(repoSlug: string) {
     stack,
     stackWithUsage,
     architecture: '',
+    isPrivate: r.isPrivate || false,
+    readme, // README incluido en la misma query!
     metadata: {}
   };
 }
