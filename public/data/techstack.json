@@ -1,1 +1,7 @@
-[]
+[
+  { "name": "TYPESCRIPT", "usageLevel": 70 },
+  { "name": "ASTRO", "usageLevel": 75 },
+  { "name": "REACT", "usageLevel": 85 },
+  { "name": "GITHUB", "usageLevel": 90 },
+  { "name": "VERCEL", "usageLevel": 95 }
+]
