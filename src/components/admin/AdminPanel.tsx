@@ -514,34 +514,49 @@ function TechTab({ onLog }: { onLog: (msg: string) => void }) {
   useEffect(() => { load(); }, [load]);
 
   async function scanAll() {
-    const s = localStorage.getItem('portfolioProjects'); if (!s) return;
-    const projectsLocal = JSON.parse(s) as Project[];
-    const slugs = projectsLocal.map(p => {
-        const slug = p.specs?.repoSlug;
-        return typeof slug === 'string' ? slug : '';
-    }).filter(Boolean);
-    setLoading(true); onLog(`SCANNING_REPOS...`);
-    try {
-      const results = await Promise.all(slugs.map(slug => 
-        fetch(`/api/github`, { 
-          method: 'POST', 
-          headers: { 'Content-Type': 'application/json' }, 
-          body: JSON.stringify({ action: 'getRepoDetails', repoSlug: slug }) 
-        }).then(r => r.ok ? r.json() as Promise<GitHubDetails> : null)
-      ));
-      const totals: Record<string, number> = {};
-      for (const r of results) { 
-        if (!r?.stack) continue;
-        const stackItems = r.stack.split(',').map((s: string) => s.trim().toUpperCase());
-        for (const item of stackItems) totals[item] = (totals[item] || 0) + 1;
+    // Read from localStorage first, then fallback to data
+    let projectsLocal: Project[] = [];
+    
+    const stored = localStorage.getItem('portfolioProjects');
+    if (stored) {
+      projectsLocal = JSON.parse(stored);
+    } else {
+      // Try data file
+      try {
+        const res = await fetch('/data/projects.json');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data)) projectsLocal = data;
+        }
+      } catch (e) {}
+    }
+    
+    if (projectsLocal.length === 0) {
+      onLog('NO_PROJECTS_FOUND');
+      return;
+    }
+    
+    // Calculate tech from local projects (no GitHub calls!)
+    const totals: Record<string, number> = {};
+    for (const p of projectsLocal) {
+      const stack = p.stack || [];
+      for (const item of stack) {
+        const clean = item.toString().toUpperCase().trim();
+        if (clean) totals[clean] = (totals[clean] || 0) + 1;
       }
-      const sorted = Object.entries(totals).sort((a, b) => b[1] - a[1]);
-      const max = sorted[0]?.[1] || 1;
-      const derived: TechTool[] = sorted.map(([n, v]) => ({ name: n.toUpperCase(), version: '', usageLevel: Math.round((v/max) * 100) }));
-      setTools(derived); localStorage.setItem('portfolioTechstack', JSON.stringify(derived));
-      onLog(`SCAN_COMPLETE: ${sorted.length} MODULES DETECTED`);
-    } catch (e: any) { onLog(`SCAN_ERROR: ${e.message}`); }
-    finally { setLoading(false); }
+    }
+    
+    const sorted = Object.entries(totals).sort((a, b) => b[1] - a[1]);
+    const max = sorted[0]?.[1] || 1;
+    const derived: TechTool[] = sorted.map(([n, v]) => ({ 
+      name: n.toUpperCase(), 
+      version: '', 
+      usageLevel: Math.round((v/max) * 100) 
+    }));
+    
+    setTools(derived); 
+    localStorage.setItem('portfolioTechstack', JSON.stringify(derived));
+    onLog(`SCAN_COMPLETE: ${sorted.length} TECHNOLOGIES`);
   }
 
   function save() {
