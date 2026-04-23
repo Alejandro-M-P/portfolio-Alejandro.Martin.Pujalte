@@ -61,76 +61,69 @@ export function parseReadmeFallback(raw: string) {
 }
 
 export async function getRepoDetails(repoSlug: string) {
-  const h = authHeaders();
-  const [repoRes, langsRes, readmeRes] = await Promise.all([
-    fetch(`https://api.github.com/repos/${repoSlug}`, { headers: h }),
-    fetch(`https://api.github.com/repos/${repoSlug}/languages`, { headers: h }),
-    fetch(`https://api.github.com/repos/${repoSlug}/readme`, { headers: h }),
-  ]);
+  const [owner, repo] = repoSlug.split('/');
+  if (!owner || !repo) throw new Error('Invalid repoSlug');
 
-  if (!repoRes.ok) throw new Error(`GH_${repoRes.status}`);
-  const r = await repoRes.json();
-  const langs = langsRes.ok ? await langsRes.json() : {};
-
-  const totalBytes = Object.values(langs).reduce((a: number, b: unknown) => a + (Number(b) || 0), 0) as number;
-  const langPercentages: Record<string, number> = {};
-  for (const [lang, bytes] of Object.entries(langs)) {
-    langPercentages[lang.toUpperCase()] = totalBytes > 0 ? Math.round((Number(bytes) / totalBytes) * 100) : 0;
-  }
-
-  let metadata: Record<string, any> = {};
-  let architecture = '';
-  let stack: string[] = [];
-  let stackWithUsage: { name: string; usageLevel: number }[] = [];
-
-  if (readmeRes.ok) {
-    const readmeData = await readmeRes.json();
-    const rawContent = decodeBase64(readmeData.content);
-    const parsed = parseFrontmatter(rawContent);
-    metadata = parsed.data;
-
-    const metaStack = metadata.stack 
-      ? (Array.isArray(metadata.stack) ? metadata.stack : metadata.stack.split(','))
-      : [];
-    
-    stack = metaStack.map((s: string) => s.trim().toUpperCase()).filter(Boolean);
-    stackWithUsage = stack.map(name => ({
-      name,
-      usageLevel: langPercentages[name] ?? 50,
-    }));
-
-    if (metadata.architecture || metadata.stack || metadata.photo || metadata.image) {
-      architecture = metadata.architecture || '';
-      // Use photo from metadata if available
-    } else {
-      const fallback = parseReadmeFallback(rawContent);
-      architecture = fallback.architecture;
-      if (!metadata.photo && !metadata.image) {
-        metadata.photo = fallback.photo;
+  const graphqlQuery = `
+    query GetRepo($owner: String!, $repo: String!) {
+      repository(owner: $owner, name: $repo) {
+        name
+        description
+        stargazerCount
+        pushedAt
+        url
+        languages(first: 15, orderBy: {field: SIZE, direction: DESC}) {
+          edges {
+            node { name color }
+            size
+          }
+        }
       }
     }
-  } else {
-    stack = Object.keys(langs).join(', ').toUpperCase().split(',').map(s => s.trim()).filter(Boolean);
-    stackWithUsage = Object.entries(langs).map(([lang, bytes]) => ({
-      name: lang.toUpperCase(),
-      usageLevel: totalBytes > 0 ? Math.round((Number(bytes) / totalBytes) * 100) : 0,
-    }));
-  }
+  `;
+
+  const res = await fetch('https://api.github.com/graphql', {
+    method: 'POST',
+    headers: {
+      ...authHeaders(),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      query: graphqlQuery,
+      variables: { owner, repo }
+    })
+  });
+
+  if (!res.ok) throw new Error(`GH_${res.status}`);
+  const json = await res.json();
+  if (json.errors) throw new Error(`GH_GRAPHQL_${json.errors[0].message}`);
+  
+  const r = json.data?.repository;
+  if (!r) throw new Error('Repository not found');
+
+  // Calcular percentages desde los sizes de languages
+  const totalBytes = r.languages?.edges?.reduce((acc: number, e: any) => acc + (e.size || 0), 0) || 0;
+  const stack = r.languages?.edges?.map((e: any) => e.node?.name?.toUpperCase())?.filter(Boolean) || [];
+  const stackWithUsage = r.languages?.edges?.map((e: any) => ({
+    name: e.node?.name?.toUpperCase(),
+    color: e.node?.color,
+    usageLevel: totalBytes > 0 ? Math.round((e.size / totalBytes) * 100) : 0,
+  })) || [];
 
   return {
     id: r.name.toUpperCase().replace(/-/g, '_'),
     name: r.name.toUpperCase().replace(/-/g, '_'),
-    photo: metadata.photo || metadata.image || `https://opengraph.githubassets.com/1/${repoSlug}`,
-    specsDescription: r.description || metadata.description || '',
-    specsLanguage: r.language || metadata.language || '',
-    specsStars: String(r.stargazers_count),
-    specsRepo: r.html_url,
+    photo: `https://opengraph.githubassets.com/1/${repoSlug}`,
+    specsDescription: r.description || '',
+    specsLanguage: stack[0] || '',
+    specsStars: String(r.stargazerCount || 0),
+    specsRepo: r.url || '',
     specsRepoSlug: repoSlug,
-    specsStatus: metadata.status || 'PROD',
-    pushedAt: r.pushed_at,
+    specsStatus: 'PROD',
+    pushedAt: r.pushedAt,
     stack,
     stackWithUsage,
-    architecture,
-    metadata
+    architecture: '',
+    metadata: {}
   };
 }
