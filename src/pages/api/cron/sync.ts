@@ -100,7 +100,7 @@ export const GET: APIRoute = async ({ request }) => {
     return new Response(JSON.stringify({ 
       success: true,
       update: isDailyUpdate ? 'full' : 'logs',
-      hour: hour,
+      hour: currentHour,
       count: projects.length,
       timestamp: new Date().toISOString()
     }), { status: 200 });
