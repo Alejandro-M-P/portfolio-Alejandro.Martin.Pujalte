@@ -234,25 +234,26 @@ function ProjectsTab({ onLog }: { onLog: (msg: string) => void }) {
   const photoInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
-    // First try localStorage (authoritative source when available)
-    const stored = localStorage.getItem('portfolioProjects');
-    if (stored) {
-      setProjects(JSON.parse(stored));
-      return;
-    }
-    
-    // Fallback to JSON file (published data from last deploy)
+    // JSON-first: load from published data (authoritative source)
     try {
       const res = await fetch('/data/projects.json');
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           setProjects(data);
+          // Also sync to localStorage for editing
+          localStorage.setItem('portfolioProjects', JSON.stringify(data));
+          return;
         }
       }
     } catch (e) {
-      // Silent fail - network errors shouldn't break admin
-      console.warn('Projects load: JSON fallback unavailable');
+      console.warn('Projects load: JSON fetch failed, falling back to localStorage');
+    }
+    
+    // Fallback to localStorage only if JSON fails
+    const stored = localStorage.getItem('portfolioProjects');
+    if (stored) {
+      setProjects(JSON.parse(stored));
     }
   }, []);
 
@@ -735,6 +736,138 @@ function PublishTab({ onLog }: { onLog: (msg: string) => void }) {
   );
 }
 
+/* --- DATA STORE TAB --- */
+
+const DATA_FILES = [
+  { key: 'projects', label: 'PROJECTS', path: '/data/projects.json' },
+  { key: 'techstack', label: 'TECHSTACK', path: '/data/techstack.json' },
+  { key: 'identity', label: 'IDENTITY', path: '/data/identity.json' },
+  { key: 'settings', label: 'SETTINGS', path: '/data/settings.json' },
+  { key: 'ambitions', label: 'AMBITIONS', path: '/data/ambitions.json' },
+] as const;
+
+function DataTab({ onLog }: { onLog: (msg: string) => void }) {
+  const [selectedFile, setSelectedFile] = useState<typeof DATA_FILES[number]['key']>('projects');
+  const [rawData, setRawData] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+
+  const loadFile = useCallback(async (key: typeof DATA_FILES[number]['key']) => {
+    setLoading(true);
+    try {
+      const file = DATA_FILES.find(f => f.key === key);
+      if (!file) return;
+      
+      // Try localStorage first (has pending edits)
+      const stored = localStorage.getItem(`portfolio${key.charAt(0).toUpperCase() + key.slice(1)}`);
+      if (stored) {
+        setRawData(stored);
+      } else {
+        // Fallback to JSON file
+        const res = await fetch(file.path);
+        if (res.ok) {
+          const data = await res.json();
+          setRawData(JSON.stringify(data, null, 2));
+        }
+      }
+    } catch (e) {
+      onLog(`LOAD_ERROR: ${key}`);
+    } finally {
+      setLoading(false);
+    }
+  }, [onLog]);
+
+  useEffect(() => { loadFile(selectedFile); }, [loadFile, selectedFile]);
+
+  function save() {
+    setSaveStatus('saving');
+    try {
+      // Validate JSON
+      JSON.parse(rawData);
+      
+      // Save to localStorage
+      const storageKey = `portfolio${selectedFile.charAt(0).toUpperCase() + selectedFile.slice(1)}`;
+      localStorage.setItem(storageKey, rawData);
+      
+      setSaveStatus('saved');
+      onLog(`SAVED: ${selectedFile.toUpperCase()}`);
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    } catch (e) {
+      setSaveStatus('error');
+      onLog('JSON_ERROR: INVALID_SYNTAX');
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-10">
+      <header className="flex justify-between items-center border-b border-white/5 pb-3">
+        <p className="text-[11px] text-white font-black tracking-widest uppercase">/ RAW_DATA_EDITOR</p>
+      </header>
+      
+      <div className="flex flex-wrap gap-2">
+        {DATA_FILES.map(f => (
+          <button 
+            key={f.key}
+            onClick={() => setSelectedFile(f.key)}
+            className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all rounded ${
+              selectedFile === f.key 
+                ? 'bg-cobalt text-white' 
+                : 'border border-white/10 text-white/40 hover:text-white hover:border-white/30'
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="bg-[#1a1a1a] border border-white/10 p-6 shadow-2xl rounded-xl">
+        <div className="flex justify-between items-center mb-4">
+          <p className="text-[10px] text-white/40 tracking-widest uppercase">{DATA_FILES.find(f => f.key === selectedFile)?.path}</p>
+          <p className={`text-[10px] font-black uppercase tracking-widest ${
+            saveStatus === 'saved' ? 'text-green-500' : 
+            saveStatus === 'error' ? 'text-err' : 
+            saveStatus === 'saving' ? 'text-cobalt animate-pulse' : 'text-white/20'
+          }`}>
+            {saveStatus === 'saved' ? '✓ SAVED' : 
+             saveStatus === 'error' ? '✕ ERROR' : 
+             saveStatus === 'saving' ? 'SAVING...' : 'MEMORY_ONLY'}
+          </p>
+        </div>
+        
+        {loading ? (
+          <div className="h-96 flex items-center justify-center">
+            <div className="w-8 h-8 border-2 border-cobalt border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : (
+          <textarea
+            value={rawData}
+            onChange={e => { setRawData(e.target.value); setSaveStatus('idle'); }}
+            className="w-full h-96 bg-black/40 border border-white/10 p-4 text-[11px] text-white font-mono focus:outline-none focus:border-cobalt/50 rounded resize-none"
+            spellCheck={false}
+          />
+        )}
+        
+        <div className="flex gap-4 mt-4 pt-4 border-t border-white/5">
+          <button onClick={save} disabled={saveStatus === 'saving' || loading} className="px-8 py-3 bg-cobalt text-white text-[10px] font-black uppercase tracking-widest hover:bg-cobalt-light transition-all rounded">
+            SAVE_TO_MEMORY
+          </button>
+          <button onClick={() => loadFile(selectedFile)} disabled={loading} className="px-6 py-3 border border-white/10 text-white/40 text-[10px] font-black uppercase hover:text-white tracking-widest transition-all rounded">
+            RELOAD
+          </button>
+          <button onClick={() => { try { setRawData(JSON.stringify(JSON.parse(rawData), null, 2)); onLog('FORMATTED'); } catch(e) { onLog('FORMAT_ERROR'); }}} className="px-6 py-3 border border-white/10 text-white/40 text-[10px] font-black uppercase hover:text-white tracking-widest transition-all rounded">
+            FORMAT
+          </button>
+        </div>
+      </div>
+      
+      <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded">
+        <p className="text-[10px] text-amber-500 tracking-widest uppercase font-black">⚠ EDITS ARE SAVED TO MEMORY</p>
+        <p className="text-[9px] text-white/40 mt-1">Use PUBLISH tab to push to production.</p>
+      </div>
+    </div>
+  );
+}
+
 /* --- Main Admin Panel --- */
 
 export default function AdminPanel() {
@@ -756,6 +889,7 @@ export default function AdminPanel() {
     { id: 'tech', label: 'TECH_REGISTRY', icon: '◰' },
     { id: 'ambitions', label: 'ROADMAP_MAPPER', icon: '▲' },
     { id: 'settings', label: 'SYSTEM_CONFIG', icon: '⚙' },
+    { id: 'data', label: 'DATA_STORE', icon: '◉' },
     { id: 'publish', label: 'PUBLISH_BRIDGE', icon: '↑' },
   ];
 
@@ -825,6 +959,7 @@ export default function AdminPanel() {
             {tab === 'tech'       && <TechTab onLog={addLog} />}
             {tab === 'ambitions'  && <AmbitionsTab onLog={addLog} />}
             {tab === 'settings'   && <SettingsTab onLog={addLog} />}
+            {tab === 'data'      && <DataTab onLog={addLog} />}
             {tab === 'publish'    && <PublishTab onLog={addLog} />}
           </div>
         </div>
