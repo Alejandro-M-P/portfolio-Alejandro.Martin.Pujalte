@@ -492,26 +492,30 @@ function TechTab({ onLog }: { onLog: (msg: string) => void }) {
   const [loading, setLoading] = useState(false);
 
   const load = useCallback(async () => {
-    // localStorage first (has pending edits)
+    // localStorage first
     const stored = localStorage.getItem('portfolioTechstack');
     if (stored) {
       setTools(JSON.parse(stored));
       return;
     }
-    // Fallback to JSON file
+    // Fallback to JSON
     try {
       const res = await fetch('/data/techstack.json');
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          setTools(data);
-        }
+        if (Array.isArray(data) && data.length > 0) setTools(data);
       }
-    } catch (e) {
-      console.warn('TechStack load: JSON fallback unavailable');
-    }
+    } catch (e) { console.warn('TechStack load: JSON fallback'); }
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  // Explicit SAVE function
+  function saveToMemory() {
+    if (tools.length > 0) {
+      localStorage.setItem('portfolioTechstack', JSON.stringify(tools));
+      onLog(`SAVED: ${tools.length} technologies to localStorage`);
+    }
+  }
 
   async function scanAll() {
     // Read from localStorage first, then fallback to data
@@ -571,7 +575,7 @@ function TechTab({ onLog }: { onLog: (msg: string) => void }) {
     <div className="flex flex-col gap-10">
       <header className="flex justify-between items-center border-b border-white/5 pb-3">
         <p className="text-[11px] text-white font-black tracking-widest uppercase">/ TECH_MATRIX_REGISTRY</p>
-        <button onClick={scanAll} disabled={loading} className="text-[10px] text-cobalt hover:underline uppercase transition-all tracking-widest">{loading ? 'SCANNING_GITHUB...' : '[REFRESH_FROM_GITHUB]'}</button>
+        <button onClick={scanAll} disabled={loading} className="text-[10px] text-cobalt hover:underline uppercase transition-all tracking-widest">{loading ? 'SYNCING...' : '[SYNC_LOCAL]'}</button>
       </header>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
         {tools.map((t, i) => (
