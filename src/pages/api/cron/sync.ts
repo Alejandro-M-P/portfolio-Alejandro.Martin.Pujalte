@@ -1,63 +1,94 @@
 import type { APIRoute } from 'astro';
-import { kv } from '@vercel/kv';
 import { getRepoDetails } from '../../../lib/github-server';
 import projectsData from '../../../../public/data/projects.json';
+import { authHeaders } from '../../../lib/github-server';
 
 export const prerender = false;
 
+const GITHUB_USER = import.meta.env.GITHUB_USER;
+const GITHUB_REPO = import.meta.env.PUBLIC_GITHUB_REPO;
+
+// Cron job: updates all project metadata via GraphQL
+// Hourly: just activity logs
+// Daily at 00:00 UTC: full repo update + commit to GitHub → Vercel rebuild
+
 export const GET: APIRoute = async ({ request }) => {
-  // Optional: Verify Vercel Cron secret if configured
+  // Verify cron secret
   const authHeader = request.headers.get('authorization');
   if (import.meta.env.PROD && authHeader !== `Bearer ${import.meta.env.CRON_SECRET}`) {
     // return new Response('Unauthorized', { status: 401 });
   }
 
+  const hour = new Date().getUTCHours();
+  const isDailyUpdate = hour === 0;
+
   try {
     const projects = projectsData as any[];
-    const cursor = (await kv.get<number>('portfolio_sync_cursor')) || 0;
-    const batchSize = 5;
     
-    // Get the slice to sync
-    const nextBatch = projects.slice(cursor, cursor + batchSize);
-    if (nextBatch.length === 0 && projects.length > 0) {
-      // If we reached the end, reset cursor and sync from start
-      await kv.set('portfolio_sync_cursor', 0);
-      return new Response(JSON.stringify({ success: true, message: 'Cursor reset' }), { status: 200 });
-    }
-
-    const cache: Record<string, any> = (await kv.get('portfolio_github_cache')) || {};
-    
-    const syncedSlugs = [];
-    for (const p of nextBatch) {
+    // Update each project
+    for (const p of projects) {
       const slug = p.specs?.repoSlug;
-      if (slug) {
-        try {
-          const details = await getRepoDetails(slug);
-          cache[slug] = {
-            ...details,
-            syncedAt: new Date().toISOString()
-          };
-          syncedSlugs.push(slug);
-        } catch (e) {
-          console.error(`[CRON] Failed to sync ${slug}:`, e);
+      if (!slug) continue;
+      
+      try {
+        const details = await getRepoDetails(slug);
+        
+        // Update stars and pushedAt
+        p.specs = p.specs || {};
+        p.specs.stars = details.specsStars;
+        p.pushedAt = details.pushedAt;
+        
+        // Update stack/languages if daily
+        if (isDailyUpdate && details.stackWithUsage?.length) {
+          p.stack = details.stack;
+          p.stackWithUsage = details.stackWithUsage;
         }
+        
+        console.log(`[CRON] Synced ${slug}: ${details.specsStars} stars`);
+      } catch (e) {
+        console.error(`[CRON] Failed ${slug}:`, e);
       }
     }
-    
-    // Save updated cache
-    await kv.set('portfolio_github_cache', cache);
-    
-    // Advance cursor
-    let nextCursor = cursor + batchSize;
-    if (nextCursor >= projects.length) nextCursor = 0;
-    await kv.set('portfolio_sync_cursor', nextCursor);
-    
+
+    // If daily update, commit to GitHub
+    if (isDailyUpdate) {
+      const content = JSON.stringify(projects, null, 2);
+      const encoded = Buffer.from(content).toString('base64');
+      
+      // Get current SHA
+      const getRes = await fetch(`https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/public/data/projects.json`, {
+        headers: authHeaders()
+      });
+      const current = await getRes.json();
+      const sha = current?.sha;
+      
+      // Commit
+      const commitRes = await fetch(`https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/public/data/projects.json`, {
+        method: 'PUT',
+        headers: {
+          ...authHeaders(),
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          message: 'chore(data): update projects via cron',
+          content: encoded,
+          ...(sha && { sha })
+        })
+      });
+      
+      if (commitRes.ok) {
+        console.log('[CRON] Committed to GitHub → rebuild will trigger');
+      }
+    }
+
     return new Response(JSON.stringify({ 
-      success: true, 
-      synced: syncedSlugs,
-      cursor: cursor,
-      nextCursor 
+      success: true,
+      update: isDailyUpdate ? 'full' : 'logs',
+      hour: hour,
+      count: projects.length,
+      timestamp: new Date().toISOString()
     }), { status: 200 });
+    
   } catch (error: any) {
     return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500 });
   }

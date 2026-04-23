@@ -102,10 +102,11 @@ async function handleGetCache() {
 }
 
 async function handlePublish(body: Record<string, unknown>) {
-  const { branch, files, buildNum } = body as {
+  const { branch, files, buildNum, message } = body as {
     branch: string;
     files: { path: string; content: string }[];
     buildNum: number;
+    message?: string;
   };
 
   const repo = GITHUB_REPO;
@@ -150,7 +151,7 @@ async function handlePublish(body: Record<string, unknown>) {
     method: 'POST',
     headers: h,
     body: JSON.stringify({
-      message: `data: update portfolio content [build #${buildNum}]`,
+      message: message || `data: update portfolio content [build #${buildNum}]`,
       tree: tree.sha,
       parents: [latestSha],
     }),

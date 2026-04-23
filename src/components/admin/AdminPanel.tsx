@@ -753,7 +753,28 @@ function PublishTab({ onLog }: { onLog: (msg: string) => void }) {
     try {
       const keys = ['portfolioProjects', 'portfolioSettings', 'portfolioExperience', 'portfolioAmbitions', 'portfolioTechstack'];
       const files = keys.filter(k => !!localStorage.getItem(k)).map(k => ({ path: `public/data/${k.replace('portfolio', '').toLowerCase()}.json`, content: localStorage.getItem(k)! }));
-      const res = await fetch('/api/github', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'publish', repo, branch: 'main', files }) });
+      
+      // Generar mensaje de commit basado en qué archivos cambian
+      const changedTypes = files.map(f => {
+        const name = f.path.split('/').pop()?.replace('.json', '') || '';
+        if (name === 'projects') return 'projects';
+        if (name === 'settings') return 'settings';
+        if (name === 'ambitions') return 'roadmap';
+        if (name === 'techstack') return 'techstack';
+        if (name === 'experience') return 'experience';
+        return name;
+      }).join(' + ').replace(' + ', ', ').replace(/, ([^,]*)$/, ' and $1');
+      
+      const changedCount = files.length;
+      const prefix = changedCount === 1 && changedTypes.includes('projects') 
+        ? 'update' 
+        : changedCount === 1 
+          ? 'update' 
+          : 'full update';
+      
+      const message = `data: ${prefix} ${changedTypes}`;
+      
+      const res = await fetch('/api/github', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'publish', repo, branch: 'main', files, message }) });
       if (!res.ok) throw new Error('BRIDGE_REJECTED');
       onLog('UPLINK_SUCCESS');
       const entry: BuildEntry = { buildNumber: (builds[0]?.buildNumber ?? 0) + 1, status: 'SUCCESS', timestamp: new Date().toISOString().slice(0, 19).replace('T', ' '), files: files.map(f => f.path.split('/').pop()!) };
