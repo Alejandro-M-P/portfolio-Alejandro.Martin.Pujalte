@@ -233,9 +233,27 @@ function ProjectsTab({ onLog }: { onLog: (msg: string) => void }) {
   const [showImport, setShowImport] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
-  const load = useCallback(() => {
+  const load = useCallback(async () => {
+    // First try localStorage (authoritative source when available)
     const stored = localStorage.getItem('portfolioProjects');
-    if (stored) setProjects(JSON.parse(stored));
+    if (stored) {
+      setProjects(JSON.parse(stored));
+      return;
+    }
+    
+    // Fallback to JSON file (published data from last deploy)
+    try {
+      const res = await fetch('/data/projects.json');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setProjects(data);
+        }
+      }
+    } catch (e) {
+      // Silent fail - network errors shouldn't break admin
+      console.warn('Projects load: JSON fallback unavailable');
+    }
   }, []);
 
   useEffect(() => { load(); }, [load]);
