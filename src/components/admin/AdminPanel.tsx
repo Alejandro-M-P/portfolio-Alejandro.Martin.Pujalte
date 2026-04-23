@@ -7,6 +7,12 @@ const SESSION_KEY   = 'admin_session';
 const SESSION_TS    = 'admin_session_ts';
 const SESSION_TTL   = 60 * 60 * 1000; // 1 hour
 
+interface StackUsage {
+  name: string;
+  color: string;
+  usageLevel: number;
+}
+
 interface GitHubDetails {
   id: string;
   name: string;
@@ -19,6 +25,7 @@ interface GitHubDetails {
   specsStatus: string;
   pushedAt: string;
   stack: string;
+  stackWithUsage?: StackUsage[];
   architecture: string;
 }
 
@@ -221,7 +228,7 @@ function RepoImportModal({ onClose, onImport, existingSlugs }: { onClose: () => 
 
 const emptyProject = {
   name: '', gitUrl: '', photo: '', video: '', stack: '', architecture: '', initSequence: '', description: '', businessImpact: '',
-  specsStatus: '', specsStars: '', specsLanguage: '', specsLicense: '', specsDescription: '', specsRepo: '', specsRepoSlug: '', specsDemo: '', specsTags: '',
+  specsStatus: '', specsStars: '', specsLanguage: '', specsLicense: '', specsDescription: '', specsRepo: '', specsRepoSlug: '', specsDemo: '', specsTags: '', stackWithUsage: '',
   isHighlighted: false, isPrivate: false, isFavorite: false, pushedAt: '', order: 0
 };
 
@@ -298,6 +305,10 @@ function ProjectsTab({ onLog }: { onLog: (msg: string) => void }) {
       });
       if (!res.ok) throw new Error(`GH_${res.status}`);
       const r = await res.json() as GitHubDetails;
+      
+      // Guardar stackWithUsage como JSON string
+      const stackWithUsageStr = r.stackWithUsage ? JSON.stringify(r.stackWithUsage) : '';
+      
       setForm(f => ({
         ...f,
         name: f.name || r.name,
@@ -310,6 +321,7 @@ function ProjectsTab({ onLog }: { onLog: (msg: string) => void }) {
         specsStatus: r.specsStatus,
         pushedAt: r.pushedAt,
         stack: r.stack,
+        stackWithUsage: stackWithUsageStr,
         architecture: r.architecture || f.architecture
       }));
       onLog(`SYNC_SUCCESS: ${repoSlug}`);
@@ -326,11 +338,21 @@ function ProjectsTab({ onLog }: { onLog: (msg: string) => void }) {
 
   function save() {
     if (!form.name.trim()) { onLog('ERROR: NAME_REQUIRED'); return; }
+    
+    // Parse stackWithUsage from form
+    let savedStackWithUsage: StackUsage[] = [];
+    try {
+      if (form.stackWithUsage) {
+        savedStackWithUsage = JSON.parse(form.stackWithUsage);
+      }
+    } catch {}
+    
     const p: Project = { 
       id: projects[editingIdx ?? -1]?.id || String(Date.now()), 
       name: form.name.toUpperCase(), 
       photo: form.photo, 
-      stack: form.stack.split(',').map(s => s.trim().toUpperCase()).filter(Boolean), 
+      stack: form.stack.split(',').map(s => s.trim().toUpperCase()).filter(Boolean),
+      stackWithUsage: savedStackWithUsage,
       architecture: form.architecture, 
       initSequence: form.initSequence, 
       description: form.description, 
@@ -345,7 +367,8 @@ function ProjectsTab({ onLog }: { onLog: (msg: string) => void }) {
         repoSlug: form.specsRepoSlug, 
         demo: form.specsDemo, 
         tags: form.specsTags.split(',').filter(Boolean), 
-        video: form.video 
+        video: form.video,
+        stackWithUsage: savedStackWithUsage
       }, 
       isHighlighted: form.isHighlighted, 
       isFavorite: form.isFavorite, 
@@ -540,23 +563,38 @@ function TechTab({ onLog }: { onLog: (msg: string) => void }) {
       return;
     }
     
-    // Calculate tech from local projects (no GitHub calls!)
-    const totals: Record<string, number> = {};
+    // Calculate tech MEDIA from projects (sum percentages / count)
+    const totals: Record<string, { sum: number; count: number }> = {};
     for (const p of projectsLocal) {
-      const stack = p.stack || [];
-      for (const item of stack) {
-        const clean = item.toString().toUpperCase().trim();
-        if (clean) totals[clean] = (totals[clean] || 0) + 1;
+      // Get stack from specs.stackWithUsage if available
+      const stackData = (p.specs?.stackWithUsage as any) as StackUsage[] | undefined;
+      if (stackData && stackData.length > 0) {
+        for (const s of stackData) {
+          const clean = s.name?.toString().toUpperCase().trim();
+          if (clean) {
+            totals[clean] = totals[clean] || { sum: 0, count: 0 };
+            totals[clean].sum += s.usageLevel || 0;
+            totals[clean].count += 1;
+          }
+        }
+      } else {
+        // Fallback: parse from stack array
+        const stack = p.stack || [];
+        for (const item of stack) {
+          const clean = item.toString().toUpperCase().trim();
+          if (clean) {
+            totals[clean] = totals[clean] || { sum: 0, count: 0 };
+            totals[clean].count += 1;
+          }
+        }
       }
     }
     
-    const sorted = Object.entries(totals).sort((a, b) => b[1] - a[1]);
-    const max = sorted[0]?.[1] || 1;
-    const derived: TechTool[] = sorted.map(([n, v]) => ({ 
-      name: n.toUpperCase(), 
-      version: '', 
-      usageLevel: Math.round((v/max) * 100) 
-    }));
+    const sorted = Object.entries(totals)
+      .map(([n, v]) => ({ name: n.toUpperCase(), usageLevel: Math.round(v.sum / v.count) }))
+      .sort((a, b) => b.usageLevel - a.usageLevel);
+    
+    const derived: TechTool[] = sorted.map(s => ({ name: s.name, version: '', usageLevel: s.usageLevel }));
     
     setTools(derived); 
     localStorage.setItem('portfolioTechstack', JSON.stringify(derived));
