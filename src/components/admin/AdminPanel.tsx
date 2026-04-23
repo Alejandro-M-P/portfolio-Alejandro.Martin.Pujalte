@@ -597,7 +597,7 @@ function TechTab({ onLog }: { onLog: (msg: string) => void }) {
         </div>
         <div className="flex gap-6 border-t border-white/5 pt-8">
           <button onClick={save} className="px-10 py-3 bg-cobalt text-white text-[10px] font-black uppercase tracking-widest rounded">SAVE_TOOL</button>
-          {editing !== null && <button onClick={() => { setTools(tools.filter((_, i) => i !== editing)); setEditing(null); setForm({ name: '', version: '', usageLevel: 80 }); }} className="text-err opacity-50 hover:opacity-100 text-[10px] font-black uppercase tracking-widest ml-auto">DELETE</button>}
+          {editing !== null && <button onClick={() => { const updated = tools.filter((_, i) => i !== editing); setTools(updated); localStorage.setItem('portfolioTechstack', JSON.stringify(updated)); setEditing(null); setForm({ name: '', version: '', usageLevel: 80 }); onLog('DELETED'); }} className="text-err opacity-50 hover:opacity-100 text-[10px] font-black uppercase tracking-widest ml-auto">DELETE</button>}
         </div>
       </div>
     </div>
@@ -663,7 +663,7 @@ function AmbitionsTab({ onLog }: { onLog: (msg: string) => void }) {
         </div>
         <div className="flex gap-6 border-t border-white/5 pt-8">
           <button onClick={save} className="px-10 py-3 bg-cobalt text-white text-[10px] font-black uppercase tracking-widest rounded">SAVE_GOAL</button>
-          {editingIdx !== null && <button onClick={() => { setItems(items.filter((_, i) => i !== editingIdx)); setEditingIdx(null); setForm({ text: '', completed: false }); }} className="text-err opacity-50 hover:opacity-100 text-[10px] font-black uppercase tracking-widest ml-auto">DELETE</button>}
+          {editingIdx !== null && <button onClick={() => { const updated = items.filter((_, i) => i !== editingIdx); setItems(updated); localStorage.setItem('portfolioAmbitions', JSON.stringify(updated)); setEditingIdx(null); setForm({ text: '', completed: false }); onLog('DELETED'); }} className="text-err opacity-50 hover:opacity-100 text-[10px] font-black uppercase tracking-widest ml-auto">DELETE</button>}
         </div>
       </div>
     </div>
