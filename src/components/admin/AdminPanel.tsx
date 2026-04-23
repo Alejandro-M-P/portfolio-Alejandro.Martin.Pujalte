@@ -491,7 +491,26 @@ function TechTab({ onLog }: { onLog: (msg: string) => void }) {
   const [form, setForm] = useState({ name: '', version: '', usageLevel: 80 });
   const [loading, setLoading] = useState(false);
 
-  const load = useCallback(() => { const s = localStorage.getItem('portfolioTechstack'); if (s) setTools(JSON.parse(s)); }, []);
+  const load = useCallback(async () => {
+    // localStorage first (has pending edits)
+    const stored = localStorage.getItem('portfolioTechstack');
+    if (stored) {
+      setTools(JSON.parse(stored));
+      return;
+    }
+    // Fallback to JSON file
+    try {
+      const res = await fetch('/data/techstack.json');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setTools(data);
+        }
+      }
+    } catch (e) {
+      console.warn('TechStack load: JSON fallback unavailable');
+    }
+  }, []);
   useEffect(() => { load(); }, [load]);
 
   async function scanAll() {
@@ -573,7 +592,22 @@ function AmbitionsTab({ onLog }: { onLog: (msg: string) => void }) {
   const [form, setForm] = useState({ text: '', completed: false });
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
 
-  const load = useCallback(() => { const s = localStorage.getItem('portfolioAmbitions'); if (s) setItems(JSON.parse(s)); }, []);
+  const load = useCallback(async () => {
+    // localStorage first
+    const stored = localStorage.getItem('portfolioAmbitions');
+    if (stored) {
+      setItems(JSON.parse(stored));
+      return;
+    }
+    // Fallback to JSON
+    try {
+      const res = await fetch('/data/ambitions.json');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) setItems(data);
+      }
+    } catch (e) {}
+  }, []);
   useEffect(() => { load(); }, [load]);
 
   function save() {
@@ -630,7 +664,23 @@ function SettingsTab({ onLog }: { onLog: (msg: string) => void }) {
   });
   const [cvLoading, setCvLoading] = useState(false);
 
-  useEffect(() => { const s = localStorage.getItem('portfolioSettings'); if (s) setSettings(JSON.parse(s)); }, []);
+  const load = useCallback(async () => {
+    // localStorage first
+    const stored = localStorage.getItem('portfolioSettings');
+    if (stored) {
+      setSettings(JSON.parse(stored));
+      return;
+    }
+    // Fallback to JSON
+    try {
+      const res = await fetch('/data/settings.json');
+      if (res.ok) {
+        const data = await res.json();
+        setSettings(data);
+      }
+    } catch (e) {}
+  }, []);
+  useEffect(() => { load(); }, [load]);
 
   function update(partial: Partial<SiteSettings>) {
     const next = { ...settings, ...partial }; setSettings(next);
