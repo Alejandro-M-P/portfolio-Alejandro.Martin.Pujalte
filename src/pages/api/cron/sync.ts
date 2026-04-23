@@ -78,7 +78,11 @@ export const GET: APIRoute = async ({ request }) => {
       const current = await getRes.json();
       const sha = current?.sha;
       
-      // Commit
+      // Commit with dynamic message
+      const updatedCount = projects.length;
+      const timestamp = new Date().toISOString().split('T')[0];
+      const message = `data: daily sync ${updatedCount} projects [${timestamp}]`;
+      
       const commitRes = await fetch(`https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/public/data/projects.json`, {
         method: 'PUT',
         headers: {
@@ -86,7 +90,7 @@ export const GET: APIRoute = async ({ request }) => {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          message: 'chore(data): update projects via cron',
+          message: message,
           content: encoded,
           ...(sha && { sha })
         })
